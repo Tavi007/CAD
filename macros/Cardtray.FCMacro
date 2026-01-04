@@ -3,129 +3,157 @@ import Part
 from math import sqrt
 
 # =====================
-# PARAMETER
+# PARAMETERS
 # =====================
+no_trays = 1
+seperator_width = 2
 
-# Kartenmaße
-card_width = 64.0
-card_height = 89.0
-no_cards = 100
-card_thickness = no_cards * 0.3 + 1
+# card dimensions
+CARD_WIDTH = 64.0
+CARD_HEIGHT = 89.0
+NO_CARDS = 20
+CARD_DEPTH = 0.3
+STACK_SIZE = NO_CARDS * CARD_DEPTH + 1
+CARD_TOLERANCE = 0.8
+CARD_FILLET = 2
 
-# Toleranzen
-tolerance = 0.8
+    
 
-# Magnet-Parameter
-use_magnets = True
-magnet_radius = 1.5
-magnet_depth = 1.0
-magnet_clearance = 0.3
+# magnet holes
+ADD_MAGNETS = True
+MAGNET_RADIUS = 1.5
+MAGNET_DEPTH = 1.0
+MAGNET_CLEARANCE = 0.3
 
-# Grundwandstärken
-wall_thickness = 2.5
-bottom_thickness = 2.5
+# wall
+WALL_THICKNESS = 2.5
+if ADD_MAGNETS:
+    minimum_thickness = (MAGNET_RADIUS + MAGNET_CLEARANCE)*2
+    WALL_THICKNESS = max(WALL_THICKNESS, minimum_thickness)
+BOTTOM_THICKNESS = 2.5
 
-# =====================
-# AUTOMATISCHE ANPASSUNG
-# =====================
+def main():
+    if no_trays < 1:
+        return
+    
+    shape = create_card_holder()
+    print(f"Dimensions: {shape.BoundBox.XLength} x {shape.BoundBox.YLength} x {shape.BoundBox.ZLength} mm^3")
+    
+    doc = App.ActiveDocument
+    if doc is None:
+        doc = App.newDocument("CardHolder")
+    
+    obj = doc.addObject("Part::Feature", "CardHolder")
+    obj.Shape = shape
+    doc.recompute()
 
-minimum_thickness = (magnet_radius + magnet_clearance) * 2 + 1.5
-wall_thickness = max(wall_thickness, minimum_thickness)
 
-# =====================
-# ABGELEITETE MAßE
-# =====================
+def create_card_holder():
+    tray_negative = create_card_tray_negatives()
+    inner_width = tray_negative.BoundBox.XLength
+    inner_depth = tray_negative.BoundBox.YLength
+    inner_height = STACK_SIZE
+    
+    outer_width  = inner_width*no_trays  + 2*WALL_THICKNESS + (no_trays-1) * seperator_width
+    outer_depth  = inner_depth + 2*WALL_THICKNESS
+    outer_height = inner_height + BOTTOM_THICKNESS
+    
+    # outer main box
+    outer_box = Part.makeBox(
+        outer_width,
+        outer_depth,
+        outer_height
+    )
+    
+    # translate once for the wall thickness
+    translation = App.Vector(WALL_THICKNESS, WALL_THICKNESS, BOTTOM_THICKNESS)
+    tray_negative = tray_negative.translate(translation)
+    outer_box = outer_box.cut(tray_negative)
+    if no_trays > 1:
+        for i in range(no_trays - 1):
+            translation = App.Vector(inner_width + seperator_width, 0, 0)
+            tray_negative = tray_negative.translate(translation)
+            outer_box = outer_box.cut(tray_negative)
+    
+    
+    if ADD_MAGNETS:
+        outer_box = cut_magnet_holes_in_corner(outer_box)
+    return outer_box
+    
 
-inner_width  = card_width  + tolerance
-inner_depth  = card_height + tolerance
-inner_height = card_thickness
+def create_card_tray_negatives():
+    width  = CARD_WIDTH  + CARD_TOLERANCE
+    depth  = CARD_HEIGHT + CARD_TOLERANCE
+    height = STACK_SIZE + 10
+    
+    b_width  = width/2
+    b_depth  = depth/8
+    
+    # base with access cutout
+    base = Part.makeBox(width, depth, height)
+    cutout = Part.makeBox(b_width, b_depth, height)
+    cutout = cutout.translate(App.Vector(b_width/2, -b_depth/2, 0))
+    base = base.fuse(cutout)
+    base = base.makeFillet(CARD_FILLET, base.Edges)
+    
+    # bumps
+    b_height = 0.5
+    bump = Part.makeBox(b_width, b_depth, b_height)
+    bump = bump.translate(App.Vector(b_width/2, b_depth*2, 0))
+    base = base.cut(bump)
+    bump = bump.translate(App.Vector(0, b_depth*3, 0))
+    base = base.cut(bump)
+    
+    return base
 
-outer_width  = inner_width  + 2 * wall_thickness
-outer_depth  = inner_depth  + 2 * wall_thickness
-outer_height = inner_height + bottom_thickness
 
-# =====================
-# FUNKTION: MAGNETLÖCHER
-# =====================
+def cut_magnet_holes_in_corner(card_holder):
+    width = card_holder.BoundBox.XLength
+    depth = card_holder.BoundBox.YLength
+    
+    x_positions = [WALL_THICKNESS/2 + 1.5, width - WALL_THICKNESS/2 - 1.5]
+    y_positions = [WALL_THICKNESS/2 + 1.5, depth - WALL_THICKNESS/2 - 1.5]
+    
+    magnet_holes = create_magnet_holes(
+        x_positions,
+        y_positions,
+        width,
+        depth,
+        card_holder.BoundBox.ZLength
+    )
 
-def create_magnet_holes(width, depth, height):
+    for hole in magnet_holes:
+        card_holder = card_holder.cut(hole)
+        
+    return card_holder
+    
+
+def create_magnet_holes(x_positions, y_positions, width, depth, height):
     holes = []
-
-    x_positions = [wall_thickness/2, width - wall_thickness/2]
-    y_positions = [wall_thickness/2, depth - wall_thickness/2]
 
     for x in x_positions:
         for y in y_positions:
-            # Untere Magneten
+            # upper magnets
             hole_bottom = Part.makeCylinder(
-                magnet_radius + magnet_clearance,
-                magnet_depth + magnet_clearance/2
+                MAGNET_RADIUS + MAGNET_CLEARANCE,
+                MAGNET_DEPTH + MAGNET_CLEARANCE/2
             )
             hole_bottom.translate(
                 App.Vector(x, y, 0)
             )
             holes.append(hole_bottom)
 
-            # Obere Magneten
+            # lower magnets
             hole_top = Part.makeCylinder(
-                magnet_radius + magnet_clearance,
-                magnet_depth + magnet_clearance/2
+                MAGNET_RADIUS + MAGNET_CLEARANCE,
+                MAGNET_DEPTH + MAGNET_CLEARANCE/2
             )
             hole_top.translate(
-                App.Vector(x, y, height - magnet_depth)
+                App.Vector(x, y, height - MAGNET_DEPTH)
             )
             holes.append(hole_top)
 
     return holes
 
-# =====================
-# GEOMETRIE
-# =====================
-
-print(f"Dimensions:{outer_width}mm x {outer_depth}mm x {outer_height}mm")
-print(f"Wall thickness: {wall_thickness}")
-
-# Außenbox
-outer_box = Part.makeBox(
-    outer_width,
-    outer_depth,
-    outer_height
-)
-
-# Innenaussparung
-inner_box = Part.makeBox(
-    inner_width,
-    inner_depth,
-    inner_height
-)
-inner_box.translate(
-    App.Vector(wall_thickness, wall_thickness, bottom_thickness)
-)
-
-card_holder = outer_box.cut(inner_box)
-
-# =====================
-# MAGNETLÖCHER SCHNEIDEN
-# =====================
-
-if use_magnets:
-    magnet_holes = create_magnet_holes(
-        outer_width,
-        outer_depth,
-        outer_height
-    )
-
-    for hole in magnet_holes:
-        card_holder = card_holder.cut(hole)
-
-# =====================
-# IN DOKUMENT EINFÜGEN
-# =====================
-
-doc = App.ActiveDocument
-if doc is None:
-    doc = App.newDocument("CardHolder")
-
-obj = doc.addObject("Part::Feature", "CardHolder")
-obj.Shape = card_holder
-doc.recompute()
+if __name__=="__main__":
+    main()

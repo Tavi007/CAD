@@ -1,0 +1,1 @@
+My personal CAD projects. I use FreeCAD and its python makros to produces various .stl files for 3d-printing

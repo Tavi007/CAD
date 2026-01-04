@@ -1,0 +1,71 @@
+import FreeCAD as App
+import Part
+
+# =====================
+# PARAMETER
+# =====================
+
+# Kartenmaße
+card_width = 63.0      # mm
+card_height = 88.0     # mm
+card_thickness = 20.0  # mm (Stapel)
+
+# Toleranz (Spielraum fürs Einlegen)
+tolerance = 0.8        # mm
+
+# Wandstärke
+wall = 2.5             # mm
+bottom_thickness = 2.5 # mm
+
+# =====================
+# ABGELEITETE MAßE
+# =====================
+
+inner_width  = card_width  + tolerance
+inner_depth  = card_height + tolerance
+inner_height = card_thickness
+
+outer_width  = inner_width  + 2 * wall
+outer_depth  = inner_depth  + 2 * wall
+outer_height = inner_height + bottom_thickness
+
+# =====================
+# GEOMETRIE
+# =====================
+
+# Außenbox
+outer_box = Part.makeBox(
+    outer_width,
+    outer_depth,
+    outer_height
+)
+
+# Innenaussparung (oben offen)
+inner_box = Part.makeBox(
+    inner_width,
+    inner_depth,
+    inner_height
+)
+
+# Innenbox nach oben und zur Seite verschieben
+inner_box.translate(App.Vector(
+    wall,
+    wall,
+    bottom_thickness
+))
+
+# Fach erzeugen
+card_holder = outer_box.cut(inner_box)
+
+# =====================
+# IN DOKUMENT EINFÜGEN
+# =====================
+
+doc = App.ActiveDocument
+if doc is None:
+    doc = App.newDocument("CardHolder")
+
+obj = doc.addObject("Part::Feature", "CardHolder")
+obj.Shape = card_holder
+
+doc.recompute()

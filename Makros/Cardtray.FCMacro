@@ -1,0 +1,131 @@
+import FreeCAD as App
+import Part
+from math import sqrt
+
+# =====================
+# PARAMETER
+# =====================
+
+# Kartenmaße
+card_width = 64.0
+card_height = 89.0
+no_cards = 100
+card_thickness = no_cards * 0.3 + 1
+
+# Toleranzen
+tolerance = 0.8
+
+# Magnet-Parameter
+use_magnets = True
+magnet_radius = 1.5
+magnet_depth = 1.0
+magnet_clearance = 0.3
+
+# Grundwandstärken
+wall_thickness = 2.5
+bottom_thickness = 2.5
+
+# =====================
+# AUTOMATISCHE ANPASSUNG
+# =====================
+
+minimum_thickness = (magnet_radius + magnet_clearance) * 2 + 1.5
+wall_thickness = max(wall_thickness, minimum_thickness)
+
+# =====================
+# ABGELEITETE MAßE
+# =====================
+
+inner_width  = card_width  + tolerance
+inner_depth  = card_height + tolerance
+inner_height = card_thickness
+
+outer_width  = inner_width  + 2 * wall_thickness
+outer_depth  = inner_depth  + 2 * wall_thickness
+outer_height = inner_height + bottom_thickness
+
+# =====================
+# FUNKTION: MAGNETLÖCHER
+# =====================
+
+def create_magnet_holes(width, depth, height):
+    holes = []
+
+    x_positions = [wall_thickness/2, width - wall_thickness/2]
+    y_positions = [wall_thickness/2, depth - wall_thickness/2]
+
+    for x in x_positions:
+        for y in y_positions:
+            # Untere Magneten
+            hole_bottom = Part.makeCylinder(
+                magnet_radius + magnet_clearance,
+                magnet_depth + magnet_clearance/2
+            )
+            hole_bottom.translate(
+                App.Vector(x, y, 0)
+            )
+            holes.append(hole_bottom)
+
+            # Obere Magneten
+            hole_top = Part.makeCylinder(
+                magnet_radius + magnet_clearance,
+                magnet_depth + magnet_clearance/2
+            )
+            hole_top.translate(
+                App.Vector(x, y, height - magnet_depth)
+            )
+            holes.append(hole_top)
+
+    return holes
+
+# =====================
+# GEOMETRIE
+# =====================
+
+print(f"Dimensions:{outer_width}mm x {outer_depth}mm x {outer_height}mm")
+print(f"Wall thickness: {wall_thickness}")
+
+# Außenbox
+outer_box = Part.makeBox(
+    outer_width,
+    outer_depth,
+    outer_height
+)
+
+# Innenaussparung
+inner_box = Part.makeBox(
+    inner_width,
+    inner_depth,
+    inner_height
+)
+inner_box.translate(
+    App.Vector(wall_thickness, wall_thickness, bottom_thickness)
+)
+
+card_holder = outer_box.cut(inner_box)
+
+# =====================
+# MAGNETLÖCHER SCHNEIDEN
+# =====================
+
+if use_magnets:
+    magnet_holes = create_magnet_holes(
+        outer_width,
+        outer_depth,
+        outer_height
+    )
+
+    for hole in magnet_holes:
+        card_holder = card_holder.cut(hole)
+
+# =====================
+# IN DOKUMENT EINFÜGEN
+# =====================
+
+doc = App.ActiveDocument
+if doc is None:
+    doc = App.newDocument("CardHolder")
+
+obj = doc.addObject("Part::Feature", "CardHolder")
+obj.Shape = card_holder
+doc.recompute()

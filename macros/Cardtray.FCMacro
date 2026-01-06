@@ -1,6 +1,6 @@
 import FreeCAD as App
 import Part
-from math import sqrt
+from math import sqrt, pi
 from dataclasses import dataclass
 import itertools
 
@@ -17,9 +17,9 @@ MAX_HEIGHT = 220
 # card dimensions
 CARD_WIDTH = 64.0
 CARD_HEIGHT = 89.0
-NO_CARDS = 65
+NO_CARDS = 100
 CARD_DEPTH = 0.3
-STACK_SIZE = NO_CARDS * CARD_DEPTH + 10
+STACK_SIZE = NO_CARDS * CARD_DEPTH
 CARD_TOLERANCE = 0.8
 CARD_FILLET = 2
 
@@ -32,8 +32,9 @@ MAGNET_CLEARANCE = 0.3
 # outer hull
 WALL_THICKNESS = 2.0
 if ADD_MAGNETS:
-    minimum_thickness = (MAGNET_RADIUS + MAGNET_CLEARANCE)*2
+    minimum_thickness = (MAGNET_RADIUS + MAGNET_CLEARANCE) * 2
     WALL_THICKNESS = max(WALL_THICKNESS, minimum_thickness)
+
 BOTTOM_THICKNESS = 2.5
 
 # Tray
@@ -41,151 +42,188 @@ NO_TRAYS = 1
 BUMP_HEIGHT = 1
 SEPERATOR_WIDTH = 2
 
+
+# =====================
+# DATA STRUCTURES
+# =====================
+
 @dataclass
 class Cylinder:
     position: App.Vector
     radius: float
     height: float
-    direction: App.Vector = App.Vector(0, 0, 1)
+    direction: App.Vector
 
+
+# =====================
+# MAIN
+# =====================
 
 def main():
     if NO_TRAYS < 1:
         return
-    
+
     shape = create_card_holder()
     if not shape:
         print("Shape won't fit in the print volume!")
         return
-    
-    
+
     doc = App.ActiveDocument
     if doc is None:
         doc = App.newDocument("CardTrays")
-    
+
     obj = doc.addObject("Part::Feature", "CardTrays")
     obj.Shape = shape
     doc.recompute()
 
 
+# =====================
+# CARD HOLDER
+# =====================
+
 def create_card_holder():
     tray_negative = create_card_tray_negatives()
-    inner_width = CARD_WIDTH  + CARD_TOLERANCE
-    inner_depth = CARD_HEIGHT  + CARD_TOLERANCE
+
+    inner_width = CARD_WIDTH + CARD_TOLERANCE
+    inner_depth = CARD_HEIGHT + CARD_TOLERANCE
     inner_height = STACK_SIZE
-    
-    outer_width  = inner_width*NO_TRAYS  + 2*WALL_THICKNESS + (NO_TRAYS-1) * SEPERATOR_WIDTH
-    outer_depth  = inner_depth + 2*WALL_THICKNESS
+
+    outer_width = inner_width * NO_TRAYS + 2 * WALL_THICKNESS + (NO_TRAYS - 1) * SEPERATOR_WIDTH
+    outer_depth = inner_depth + 2 * WALL_THICKNESS
     outer_height = inner_height + BOTTOM_THICKNESS
-    
-    # outer main box
-    outer_box = Part.makeBox(
-        outer_width,
-        outer_depth,
-        outer_height
-    )
-    
-    # translate once for the wall thickness
+
+    outer_box = Part.makeBox(outer_width, outer_depth, outer_height)
+
+    # First tray
     translation = App.Vector(WALL_THICKNESS, WALL_THICKNESS, BOTTOM_THICKNESS)
     tray_negative = tray_negative.translate(translation)
     outer_box = outer_box.cut(tray_negative)
+
+    # Additional trays
     if NO_TRAYS > 1:
-        for i in range(NO_TRAYS - 1):
-            translation = App.Vector(inner_width + SEPERATOR_WIDTH, 0, 0)
-            tray_negative = tray_negative.translate(translation)
+        for _ in range(NO_TRAYS - 1):
+            tray_negative = tray_negative.translate(
+                App.Vector(inner_width + SEPERATOR_WIDTH, 0, 0)
+            )
             outer_box = outer_box.cut(tray_negative)
-    
-    
+
     if ADD_MAGNETS:
-        outer_box = cut_magnet_holes_in_corner(outer_box, outer_width, outer_depth, outer_height)
-        
-    print(f"Dimensions: {outer_width} x {outer_depth} x {outer_height} mm^3")
-    
-    if outer_width <= MAX_WIDTH and outer_depth <= MAX_DEPTH and outer_height <= MAX_HEIGHT:
-        print(f"Will fit as is")
-        return outer_box
-    elif outer_width <= MAX_DEPTH and outer_depth <= MAX_WIDTH and outer_height <= MAX_HEIGHT:
-        print(f"Must rotate around z axis 90° to fit")
-        # todo
-        return outer_box
-    elif outer_width + outer_depth <= sqrt(MAX_WIDTH + MAX_DEPTH):
-        print(f"Must rotate around z axis 45° to fit")
-        # todo
-        return outer_box
-    elif outer_width + outer_height <= sqrt(MAX_WIDTH + MAX_DEPTH):
-        print(f"Must rotate around x axis 90° and then z axis 45° to fit")
-        # todo
-        return outer_box
-    elif outer_depth + outer_height <= sqrt(MAX_WIDTH + MAX_DEPTH):
-        print(f"Must rotate around y axis 90° and then z axis 45° to fit")
-        # todo
-        return outer_box
-    else:
-        print(f"Will NOT fit diagonally!")
-        return outer_box
-        
-    
+        outer_box = cut_magnet_holes(outer_box, outer_width, outer_depth, outer_height)
+
+    print(f"Dimensions: {outer_width} x {outer_depth} x {outer_height} mm³")
+
+    return outer_box
+
+
+# =====================
+# TRAY NEGATIVE
+# =====================
 
 def create_card_tray_negatives():
-    width  = CARD_WIDTH  + CARD_TOLERANCE
-    depth  = CARD_HEIGHT + CARD_TOLERANCE
+    width = CARD_WIDTH + CARD_TOLERANCE
+    depth = CARD_HEIGHT + CARD_TOLERANCE
     height = STACK_SIZE + 10
-    
-    b_width  = width/2
-    b_depth  = depth/8
-    
-    # base with access cutout
+
+    b_width = width / 2
+    b_depth = depth / 8
+
     base = Part.makeBox(width, depth, height)
+
     cutout = Part.makeBox(b_width, b_depth, height)
-    cutout = cutout.translate(App.Vector(b_width/2, -b_depth/2, 0))
+    cutout = cutout.translate(App.Vector(b_width / 2, -b_depth / 2, 0))
     base = base.fuse(cutout)
+
     base = base.makeFillet(CARD_FILLET, base.Edges)
-    
-    # bumps
+
     bump = Part.makeBox(b_width, b_depth, BUMP_HEIGHT)
-    bump = bump.translate(App.Vector(b_width/2, b_depth*2, 0))
+    bump = bump.translate(App.Vector(b_width / 2, b_depth * 2, 0))
     base = base.cut(bump)
-    bump = bump.translate(App.Vector(0, b_depth*3, 0))
+
+    bump = bump.translate(App.Vector(0, b_depth * 3, 0))
     base = base.cut(bump)
-    
+
     return base
 
 
-def cut_magnet_holes_in_corner(card_holder, width, depth, height):
-    distance_to_edge = WALL_THICKNESS/2 + 0.75
-    x_positions = [distance_to_edge, width - distance_to_edge]
-    y_positions = [distance_to_edge, depth - distance_to_edge]
-    z_positions = [0, height - MAGNET_DEPTH]
-    positions = itertools.product(x_positions, y_positions, z_positions)
-    
-    magnet_holes = []
-    for x,y,z in positions:
-        cylinder = Cylinder(
-            App.Vector(x,y,z),
-            MAGNET_RADIUS + MAGNET_CLEARANCE,
-            MAGNET_DEPTH + MAGNET_CLEARANCE/2
-        )
-        magnet_hole = create_magnet_hole(
-            cylinder,
-            width,
-            depth,
-            height
-        )
-        magnet_holes.append(magnet_hole)
+# =====================
+# MAGNET HOLES
+# =====================
 
-    for hole in magnet_holes:
+def cut_magnet_holes(card_holder, width, depth, height):
+    cylinders = []
+    cylinders.extend(create_corner_magnets(width, depth, height))
+    cylinders.extend(create_side_wall_magnets(width, depth, height))
+
+    for cyl in cylinders:
+        hole = create_magnet_hole(cyl)
         card_holder = card_holder.cut(hole)
-        
-    return card_holder
-    
 
-def create_magnet_hole(cylinder):
-    hole = Part.makeCylinder(
-        cylinder.radius,
-        cylinder.height
-    )
+    return card_holder
+
+
+def create_corner_magnets(width, depth, height):
+    d = WALL_THICKNESS / 2 + 0.75
+
+    x_positions = [d, width - d]
+    y_positions = [d, depth - d]
+    z_positions = [0, height - MAGNET_DEPTH]
+
+    cylinders = []
+    for x, y, z in itertools.product(x_positions, y_positions, z_positions):
+        cylinders.append(
+            Cylinder(
+                position=App.Vector(x, y, z),
+                radius=MAGNET_RADIUS + MAGNET_CLEARANCE,
+                height=MAGNET_DEPTH + MAGNET_CLEARANCE / 2,
+                direction=App.Vector(0, 0, 1)
+            )
+        )
+    return cylinders
+
+
+def create_side_wall_magnets(width, depth, height):
+    d = WALL_THICKNESS / 2 + 0.75
+    z_position = (height - MAGNET_DEPTH)/2
+
+    cx = width / 2
+    cy = depth / 2
+
+    specs = [
+        (App.Vector(cx, d, 0), App.Vector(0, -1, 0)),   # front
+        (App.Vector(cx, depth - d, 0), App.Vector(0, 1, 0)),  # back
+        (App.Vector(d, cy, 0), App.Vector(-1, 0, 0)),  # left
+        (App.Vector(width - d, cy, 0), App.Vector(1, 0, 0)),  # right
+    ]
+
+    cylinders = []
+    for base_pos, direction in specs:
+        cylinders.append(
+            Cylinder(
+                position=App.Vector(base_pos.x, base_pos.y, z_position),
+                radius=MAGNET_RADIUS + MAGNET_CLEARANCE,
+                height=WALL_THICKNESS + MAGNET_CLEARANCE,
+                direction=direction
+            )
+        )
+
+    return cylinders
+
+
+def create_magnet_hole(cylinder: Cylinder):
+    hole = Part.makeCylinder(cylinder.radius, cylinder.height)
+
+    if cylinder.direction != App.Vector(0, 0, 1):
+        axis = App.Vector(0, 0, 1).cross(cylinder.direction)
+        angle = App.Vector(0, 0, 1).getAngle(cylinder.direction)
+        hole.rotate(App.Vector(0, 0, 0), axis, angle * 180 / pi)
+
     hole.translate(cylinder.position)
     return hole
 
-if __name__=="__main__":
+
+# =====================
+# ENTRY POINT
+# =====================
+
+if __name__ == "__main__":
     main()

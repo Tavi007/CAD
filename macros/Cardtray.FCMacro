@@ -20,7 +20,7 @@ CARD_HEIGHT = 89.0
 NO_CARDS = 100
 CARD_DEPTH = 0.3
 STACK_SIZE = NO_CARDS * CARD_DEPTH
-CARD_TOLERANCE = 0.8
+CARD_TOLERANCE = 1
 CARD_FILLET = 2
 
 # magnet holes
@@ -29,18 +29,19 @@ MAGNET_RADIUS = 1.5
 MAGNET_DEPTH = 1.0
 MAGNET_CLEARANCE = 0.3
 
-# outer hull
-WALL_THICKNESS = 2.0
-if ADD_MAGNETS:
-    minimum_thickness = (MAGNET_RADIUS + MAGNET_CLEARANCE) * 2
-    WALL_THICKNESS = max(WALL_THICKNESS, minimum_thickness)
-
-BOTTOM_THICKNESS = 2.5
-
 # Tray
 NO_TRAYS = 1
 BUMP_HEIGHT = 1
-SEPERATOR_WIDTH = 2
+SEPERATOR_WIDTH = 1
+
+# outer hull
+WALL_THICKNESS = SEPERATOR_WIDTH
+if ADD_MAGNETS:
+    minimum_thickness = (MAGNET_RADIUS + MAGNET_CLEARANCE) * 2 + 1
+    WALL_THICKNESS = max(WALL_THICKNESS, minimum_thickness)
+    SEPERATOR_WIDTH = MAGNET_DEPTH + MAGNET_CLEARANCE + 0.5
+
+BOTTOM_THICKNESS = 2.5
 
 
 # =====================
@@ -88,14 +89,14 @@ def create_card_holder():
     inner_depth = CARD_HEIGHT + CARD_TOLERANCE
     inner_height = STACK_SIZE
 
-    outer_width = inner_width * NO_TRAYS + 2 * WALL_THICKNESS + (NO_TRAYS - 1) * SEPERATOR_WIDTH
+    outer_width = inner_width * NO_TRAYS + (NO_TRAYS + 1) * SEPERATOR_WIDTH
     outer_depth = inner_depth + 2 * WALL_THICKNESS
     outer_height = inner_height + BOTTOM_THICKNESS
 
     outer_box = Part.makeBox(outer_width, outer_depth, outer_height)
 
     # First tray
-    translation = App.Vector(WALL_THICKNESS, WALL_THICKNESS, BOTTOM_THICKNESS)
+    translation = App.Vector(SEPERATOR_WIDTH, WALL_THICKNESS, BOTTOM_THICKNESS)
     tray_negative = tray_negative.translate(translation)
     outer_box = outer_box.cut(tray_negative)
 
@@ -162,10 +163,11 @@ def cut_magnet_holes(card_holder, width, depth, height):
 
 
 def create_corner_magnets(width, depth, height):
-    d = WALL_THICKNESS / 2 + 0.75
+    dx = WALL_THICKNESS / 2 + 0.75
+    dy = WALL_THICKNESS / 2
 
-    x_positions = [d, width - d]
-    y_positions = [d, depth - d]
+    x_positions = [dx, width - dx]
+    y_positions = [dy, depth - dy]
     z_positions = [0, height - MAGNET_DEPTH]
 
     cylinders = []
@@ -182,26 +184,29 @@ def create_corner_magnets(width, depth, height):
 
 
 def create_side_wall_magnets(width, depth, height):
-    d = WALL_THICKNESS / 2 + 0.75
-    z_position = (height - MAGNET_DEPTH)/2
+    dx = SEPERATOR_WIDTH / 2
+    dy = WALL_THICKNESS / 2
+    
+    
+    z_position = height/2
 
     cx = width / 2
     cy = depth / 2
 
     specs = [
-        (App.Vector(cx, d, 0), App.Vector(0, -1, 0)),   # front
-        (App.Vector(cx, depth - d, 0), App.Vector(0, 1, 0)),  # back
-        (App.Vector(d, cy, 0), App.Vector(-1, 0, 0)),  # left
-        (App.Vector(width - d, cy, 0), App.Vector(1, 0, 0)),  # right
+        (cx, dy, App.Vector(0, -1, 0)),   # front
+        (cx, depth - dy, App.Vector(0, 1, 0)),  # back
+        (dx, cy, App.Vector(-1, 0, 0)),  # left
+        (width - dx, cy, App.Vector(1, 0, 0)),  # right
     ]
 
     cylinders = []
-    for base_pos, direction in specs:
+    for x, y, direction in specs:
         cylinders.append(
             Cylinder(
-                position=App.Vector(base_pos.x, base_pos.y, z_position),
+                position=App.Vector(x, y, z_position),
                 radius=MAGNET_RADIUS + MAGNET_CLEARANCE,
-                height=WALL_THICKNESS + MAGNET_CLEARANCE,
+                height=MAGNET_DEPTH + MAGNET_CLEARANCE / 2,
                 direction=direction
             )
         )

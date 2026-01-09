@@ -25,21 +25,23 @@ CARD_FILLET = 2
 
 # magnet holes
 ADD_MAGNETS = True
-MAGNET_RADIUS = 1.5
-MAGNET_DEPTH = 1.0
+MAGNET_RADIUS = 3
+MAGNET_DEPTH = 3.0
 MAGNET_CLEARANCE = 0.3
 
 # Tray
 NO_TRAYS = 1
-BUMP_HEIGHT = 1
+BUMP_HEIGHT = 1.5
+SLIT_WIDTH = 25
 SEPERATOR_WIDTH = 1
+CORNER_ROUNDING_RADIUS = 10
 
 # outer hull
 WALL_THICKNESS = SEPERATOR_WIDTH
 if ADD_MAGNETS:
-    minimum_thickness = (MAGNET_RADIUS + MAGNET_CLEARANCE) * 2 + 1
+    minimum_thickness = (MAGNET_RADIUS + MAGNET_CLEARANCE) * 2 + 2
     WALL_THICKNESS = max(WALL_THICKNESS, minimum_thickness)
-    SEPERATOR_WIDTH = MAGNET_DEPTH + MAGNET_CLEARANCE + 0.5
+    #SEPERATOR_WIDTH = MAGNET_DEPTH + MAGNET_CLEARANCE + 0.5
 
 BOTTOM_THICKNESS = 2.5
 
@@ -94,10 +96,20 @@ def create_card_holder():
     outer_height = inner_height + BOTTOM_THICKNESS
 
     outer_box = Part.makeBox(outer_width, outer_depth, outer_height)
+    # round top edges
+    bottom_edges = []
+    for edge in outer_box.Edges:
+        z_values = [v.Point.z for v in edge.Vertexes]
+        if all(abs(z-outer_height) < 1E-6 for z in z_values):
+            bottom_edges.append(edge)    
+    outer_box = outer_box.makeFillet(SEPERATOR_WIDTH/2, bottom_edges)
 
-    # First tray
+    # helper geometries
     translation = App.Vector(SEPERATOR_WIDTH, WALL_THICKNESS, BOTTOM_THICKNESS)
     tray_negative = tray_negative.translate(translation)
+    
+    
+    # First tray
     outer_box = outer_box.cut(tray_negative)
 
     # Additional trays
@@ -107,6 +119,7 @@ def create_card_holder():
                 App.Vector(inner_width + SEPERATOR_WIDTH, 0, 0)
             )
             outer_box = outer_box.cut(tray_negative)
+            
 
     if ADD_MAGNETS:
         outer_box = cut_magnet_holes(outer_box, outer_width, outer_depth, outer_height)
@@ -125,25 +138,57 @@ def create_card_tray_negatives():
     depth = CARD_HEIGHT + CARD_TOLERANCE
     height = STACK_SIZE + 10
 
-    b_width = width / 2
     b_depth = depth / 8
 
     base = Part.makeBox(width, depth, height)
+    
+    # round bottom edges
+    bottom_edges = []
+    for edge in base.Edges:
+        z_values = [v.Point.z for v in edge.Vertexes]
+        if all(abs(z) < 1E-6 for z in z_values):
+            bottom_edges.append(edge)    
+    base = base.makeFillet(CARD_FILLET, bottom_edges)
 
-    cutout = Part.makeBox(b_width, b_depth, height)
-    cutout = cutout.translate(App.Vector(b_width / 2, -b_depth / 2, 0))
-    base = base.fuse(cutout)
-
-    base = base.makeFillet(CARD_FILLET, base.Edges)
-
-    bump = Part.makeBox(b_width, b_depth, BUMP_HEIGHT)
-    bump = bump.translate(App.Vector(b_width / 2, b_depth * 2, 0))
+    # bumps
+    bump = Part.makeBox(SLIT_WIDTH, b_depth, BUMP_HEIGHT)
+    bump = bump.translate(App.Vector((width - SLIT_WIDTH)/2, b_depth * 2, 0))
     base = base.cut(bump)
-
     bump = bump.translate(App.Vector(0, b_depth * 3, 0))
     base = base.cut(bump)
 
+    cutout = get_finger_cut_out()
+    base = base.fuse(cutout)
+    
     return base
+    
+    
+def get_finger_cut_out():
+    width = CARD_WIDTH + CARD_TOLERANCE
+    depth = CARD_HEIGHT + CARD_TOLERANCE
+    height = STACK_SIZE + 10
+
+    # cut out for finger
+    cutout = Part.makeBox(SLIT_WIDTH, WALL_THICKNESS, height)
+    cutout = cutout.translate(App.Vector((width - SLIT_WIDTH)/2, -WALL_THICKNESS, 0))
+    
+    # round corner of cutout
+    corner_cut = Part.makeBox(SLIT_WIDTH + 2*CORNER_ROUNDING_RADIUS, WALL_THICKNESS, CORNER_ROUNDING_RADIUS)
+    corner_cut = corner_cut.cut(create_hole(Cylinder(
+        position=App.Vector(0, 0, 0),
+        radius=CORNER_ROUNDING_RADIUS,
+        height=WALL_THICKNESS,
+        direction=App.Vector(0, 1, 0)
+    )))
+    corner_cut = corner_cut.cut(create_hole(Cylinder(
+        position=App.Vector(SLIT_WIDTH + 2*CORNER_ROUNDING_RADIUS, 0, 0),
+        radius=CORNER_ROUNDING_RADIUS,
+        height=WALL_THICKNESS,
+        direction=App.Vector(0, 1, 0)
+    )))
+    corner_cut.translate(App.Vector(CORNER_ROUNDING_RADIUS, -WALL_THICKNESS, height-CORNER_ROUNDING_RADIUS*2))
+    cutout = cutout.fuse(corner_cut)
+    return cutout
 
 
 # =====================
@@ -156,7 +201,7 @@ def cut_magnet_holes(card_holder, width, depth, height):
     cylinders.extend(create_side_wall_magnets(width, depth, height))
 
     for cyl in cylinders:
-        hole = create_magnet_hole(cyl)
+        hole = create_hole(cyl)
         card_holder = card_holder.cut(hole)
 
     return card_holder
@@ -184,20 +229,15 @@ def create_corner_magnets(width, depth, height):
 
 
 def create_side_wall_magnets(width, depth, height):
-    dx = SEPERATOR_WIDTH / 2
-    dy = WALL_THICKNESS / 2
     
-    
+    dy = SEPERATOR_WIDTH + MAGNET_RADIUS + MAGNET_CLEARANCE
     z_position = height/2
 
-    cx = width / 2
-    cy = depth / 2
-
     specs = [
-        (cx, dy, App.Vector(0, -1, 0)),   # front
-        (cx, depth - dy, App.Vector(0, 1, 0)),  # back
-        (dx, cy, App.Vector(-1, 0, 0)),  # left
-        (width - dx, cy, App.Vector(1, 0, 0)),  # right
+        (0, dy, App.Vector(1, 0, 0)),   # front
+        (0, depth - dy, App.Vector(1, 0, 0)),  # back
+        (width, dy, App.Vector(1, 0, 0)),  # left
+        (width, depth - dy, App.Vector(1, 0, 0)),  # right
     ]
 
     cylinders = []
@@ -214,7 +254,7 @@ def create_side_wall_magnets(width, depth, height):
     return cylinders
 
 
-def create_magnet_hole(cylinder: Cylinder):
+def create_hole(cylinder: Cylinder):
     hole = Part.makeCylinder(cylinder.radius, cylinder.height)
 
     if cylinder.direction != App.Vector(0, 0, 1):

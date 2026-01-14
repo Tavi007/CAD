@@ -20,10 +20,10 @@ CARD_HEIGHT = 89.0
 NO_CARDS = 100
 CARD_DEPTH = 0.3
 #STACK_SIZE = NO_CARDS * CARD_DEPTH
-STACK_SIZE = 38 
+STACK_SIZE = 38.5 
 # final height is STACK_SIZE + BOTTOM_THICKNESS
 # Effective stack size is STACK_SIZE - BUMP_HEIGHT
-CARD_TOLERANCE = 1
+CARD_TOLERANCE = 2
 CARD_FILLET = 2
 
 # magnet holes
@@ -46,23 +46,29 @@ NO_TRAYS = 1
 
 BUMP_HEIGHT = 1.5
 SLIT_WIDTH = 25
-SEPERATOR_WIDTH = 1
+SEPERATOR_WIDTH = 1.75
 CORNER_ROUNDING_RADIUS = 10
 
 # outer hull
 TOP_WALL_THICKNESS = SEPERATOR_WIDTH
 BOT_WALL_THICKNESS = SEPERATOR_WIDTH
 if ADD_MAGNETS:
-    minimum_thickness = (MAGNET_RADIUS + MAGNET_CLEARANCE) * 2 + 2
+    minimum_thickness = (MAGNET_RADIUS + MAGNET_CLEARANCE) * 2 + 2 + SEPERATOR_WIDTH
     TOP_WALL_THICKNESS = max(TOP_WALL_THICKNESS, minimum_thickness)
     BOT_WALL_THICKNESS = max(BOT_WALL_THICKNESS, minimum_thickness)
 
 if ADD_STICKER_TOP:
-    minimum_thickness = (RADIUS_STICKER_TOP + STICKER_CLEARANCE) * 2 + 2
+    minimum_thickness = (RADIUS_STICKER_TOP + STICKER_CLEARANCE) * 2 + 2 + SEPERATOR_WIDTH
     TOP_WALL_THICKNESS = max(TOP_WALL_THICKNESS, minimum_thickness)
 
 
 BOTTOM_THICKNESS = 2.5
+
+def get_inner_sizes():
+    width = CARD_WIDTH + CARD_TOLERANCE
+    depth = CARD_HEIGHT + CARD_TOLERANCE
+    height = STACK_SIZE
+    return width, depth, height
 
 
 
@@ -108,23 +114,14 @@ def main():
 
 def create_card_holder():
     tray_negative = create_card_tray_negatives()
-
-    inner_width = CARD_WIDTH + CARD_TOLERANCE
-    inner_depth = CARD_HEIGHT + CARD_TOLERANCE
-    inner_height = STACK_SIZE
+    inner_width, inner_depth, inner_height = get_inner_sizes()
 
     outer_width = inner_width * NO_TRAYS + (NO_TRAYS + 1) * SEPERATOR_WIDTH
     outer_depth = inner_depth + TOP_WALL_THICKNESS + BOT_WALL_THICKNESS
     outer_height = inner_height + BOTTOM_THICKNESS
 
     outer_box = Part.makeBox(outer_width, outer_depth, outer_height)
-    # round top edges
-    bottom_edges = []
-    for edge in outer_box.Edges:
-        z_values = [v.Point.z for v in edge.Vertexes]
-        if all(abs(z-outer_height) < 1E-6 for z in z_values):
-            bottom_edges.append(edge)    
-    outer_box = outer_box.makeFillet(SEPERATOR_WIDTH/2, bottom_edges)
+    outer_box = outer_box.makeFillet(SEPERATOR_WIDTH/2, outer_box.Edges)
 
     # helper geometries
     translation = App.Vector(SEPERATOR_WIDTH, BOT_WALL_THICKNESS, BOTTOM_THICKNESS)
@@ -157,10 +154,7 @@ def create_card_holder():
 # =====================
 
 def create_card_tray_negatives():
-    width = CARD_WIDTH + CARD_TOLERANCE
-    depth = CARD_HEIGHT + CARD_TOLERANCE
-    height = STACK_SIZE + 10
-
+    width, depth, height = get_inner_sizes()
     b_depth = depth / 8
 
     base = Part.makeBox(width, depth, height)
@@ -187,12 +181,10 @@ def create_card_tray_negatives():
     
     
 def get_finger_cut_out():
-    width = CARD_WIDTH + CARD_TOLERANCE
-    depth = CARD_HEIGHT + CARD_TOLERANCE
-    height = STACK_SIZE + 10
+    width, depth, height = get_inner_sizes()
 
     # cut out for finger
-    cutout = Part.makeBox(SLIT_WIDTH, BOT_WALL_THICKNESS, height)
+    cutout = Part.makeBox(SLIT_WIDTH, BOT_WALL_THICKNESS + 2, height)
     cutout = cutout.translate(App.Vector((width - SLIT_WIDTH)/2, -BOT_WALL_THICKNESS, 0))
     
     # round corner of cutout
@@ -209,7 +201,7 @@ def get_finger_cut_out():
         height=BOT_WALL_THICKNESS,
         direction=App.Vector(0, 1, 0)
     )))
-    corner_cut.translate(App.Vector(CORNER_ROUNDING_RADIUS, -BOT_WALL_THICKNESS, height-CORNER_ROUNDING_RADIUS*2))
+    corner_cut.translate(App.Vector((width-SLIT_WIDTH)/2 - CORNER_ROUNDING_RADIUS, -BOT_WALL_THICKNESS, height-CORNER_ROUNDING_RADIUS))
     cutout = cutout.fuse(corner_cut)
     return cutout
 

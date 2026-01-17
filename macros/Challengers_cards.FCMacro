@@ -1,0 +1,140 @@
+
+
+
+import FreeCAD as App
+import Part
+from math import sqrt, pi
+from dataclasses import dataclass
+import itertools
+
+# =====================
+# PARAMETERS
+# =====================
+
+# printer
+MAX_WIDTH = 220
+MAX_DEPTH = 220
+MAX_HEIGHT = 220
+
+# Space left for width: 135
+# Space needed for trophies chip: 35 + clearance
+TROPHY_CLEARANCE = 1.5
+TROPHY_TOP_WIDTH = 35 + TROPHY_CLEARANCE
+TROPHY_TOP_HEIGHT = 23 + TROPHY_CLEARANCE
+TROPHY_BOT_WIDTH = 20 + TROPHY_CLEARANCE
+TROPHY_BOT_HEIGHT = 7 + TROPHY_CLEARANCE
+
+TROPHY_DEPTH = 9 + TROPHY_CLEARANCE
+NO_TROPHIES = 7 
+
+# Tray
+SEPERATOR_WIDTH = 1.5
+BOTTOM_THICKNESS = 2.5
+
+# card dimensions
+CARD_CLEARANCE = 2
+CARD_WIDTH = 89.0 + CARD_CLEARANCE
+CARD_HEIGHT = 64.0 + CARD_CLEARANCE
+CARD_DEPTHS = [36, 36, 26, 16, 3] # A, B, C cards, start decks, gameplay 
+#CARD_DEPTHS = [2, 8, 6] # solo, bot, trainer 
+CARD_DEPTHS = [d + CARD_CLEARANCE for d in CARD_DEPTHS]
+
+
+# BOX LENGTH = 285
+
+CUTOUT_RADIUS = 25
+
+MAGNET_CLEARANCE = 0.3
+MAGNET_RADIUS = 3 + MAGNET_CLEARANCE
+MAGNET_HEIGHT = 3 + MAGNET_CLEARANCE
+
+
+
+
+@dataclass
+class Cutout:
+    position: App.Vector
+    width: int
+    height: int
+    depth: int
+    
+    def get_box(self):
+        box = Part.makeBox(self.width, self.depth, self.height)
+        #box = outer_box.makeFillet(SEPERATOR_WIDTH/2, outer_box.Edges)
+        box = box.translate(self.position)
+        return box
+        
+
+# =====================
+# MAIN
+# =====================
+
+def main():
+    shape = create_card_holder()
+    if not shape:
+        print("Shape won't fit in the print volume!")
+        return
+
+    doc = App.ActiveDocument
+    if doc is None:
+        doc = App.newDocument("ChallengerCardTrays")
+
+    obj = doc.addObject("Part::Feature", "CardTrays")
+    obj.Shape = shape
+    doc.recompute()
+
+
+# =====================
+# CARD HOLDER
+# =====================
+
+def create_card_holder():
+    outer_depth = SEPERATOR_WIDTH
+    cutouts = []
+    for i in range(len(CARD_DEPTHS)):
+        depth = CARD_DEPTHS[i]
+        position = App.Vector(SEPERATOR_WIDTH, outer_depth, BOTTOM_THICKNESS)
+        outer_depth = outer_depth +  depth + SEPERATOR_WIDTH
+        cutouts.append(Cutout(
+            position, 
+            CARD_WIDTH, 
+            CARD_HEIGHT, 
+            depth,
+        ))
+    
+    
+    outer_width = CARD_WIDTH + SEPERATOR_WIDTH*2
+    outer_height = CARD_HEIGHT + BOTTOM_THICKNESS -10
+    outer_box = Part.makeBox(outer_width, outer_depth, outer_height)
+
+    for i in range(len(cutouts)):
+        inner_box = cutouts[i].get_box()
+        outer_box = outer_box.cut(inner_box)
+    
+    
+    outer_box = outer_box.cut(get_finger_cut_out(outer_depth))
+    print(f"Dimensions: {outer_width} x {outer_depth} x {outer_height} mm³")
+    outer_box = outer_box.makeFillet(SEPERATOR_WIDTH/2.1, outer_box.Edges)
+
+    return outer_box
+    
+    
+def get_finger_cut_out(depth):
+    cylinder = Part.makeCylinder(CUTOUT_RADIUS, depth)
+
+    direction = App.Vector(0, 1, 0)
+    axis = App.Vector(0, 0, 1).cross(direction)
+    angle = App.Vector(0, 0, 1).getAngle(direction)
+    cylinder.rotate(App.Vector(0, 0, 0), axis, angle * 180 / pi)
+
+    position = App.Vector(CARD_WIDTH/2 + SEPERATOR_WIDTH, 0, CARD_HEIGHT + BOTTOM_THICKNESS)
+    cylinder.translate(position)
+    return cylinder
+
+
+# =====================
+# ENTRY POINT
+# =====================
+
+if __name__ == "__main__":
+    main()

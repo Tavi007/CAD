@@ -18,8 +18,8 @@ traits = 74.5 - catastrophes_and_bol - ages # > 43 <=>
 
 
 #overlushed = 20
-#Meaning_of_life = 8
-#magical_merchants = 20
+Meaning_of_life = 10
+magical_merchants = 18.5
 
 
 
@@ -51,7 +51,7 @@ CARD_DEPTH = 0.3
 # final height is STACK_SIZE + BOTTOM_THICKNESS
 # Effective stack size is STACK_SIZE - BUMP_HEIGHT
 #STACK_SIZE = NO_CARDS * CARD_DEPTH + BUMP_HEIGHT 
-STACK_SIZE = catastrophes_and_bol
+STACK_SIZE = Meaning_of_life + BUMP_HEIGHT
 
 CARD_TOLERANCE = 2
 CARD_FILLET = 2

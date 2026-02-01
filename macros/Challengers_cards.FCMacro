@@ -28,7 +28,7 @@ OUTER_WALL_DEPTH = MAGNET_HEIGHT + 1
 CARD_CLEARANCE = 1.3
 CARD_WIDTH = 90.0 + CARD_CLEARANCE
 CARD_HEIGHT = 64.0 + CARD_CLEARANCE
-CARD_DEPTHS = [36, 36, 26, 17, 4, 9] # A, B, C cards, start decks, tournier plan, misc
+CARD_DEPTHS = [36, 36, 26, 18, 5, 10] # A, B, C cards, start decks, tournier plan, misc
 CARD_DEPTHS = [d + CARD_CLEARANCE for d in CARD_DEPTHS]
 CARD_ACCESS_RADIUS = 25
 CARD_WALL_DISANCE = 10
@@ -52,9 +52,9 @@ CHIP_HEIGHT = (7.5 + CHIP_CLEARANCE)*NO_CHIPS
 CHIP_ACCESS_RADIUS = 10
 
 # icons
-ICON_DISTANCE = 15.0   # Abstand vom Mittelpunkt zu den äußeren Zylindern
+ICON_DISTANCE = 16.0   # Abstand vom Mittelpunkt zu den äußeren Zylindern
 ICON_RADIUS  = 6 + CHIP_CLEARANCE    # Radius der Zylinder
-ICON_HEIGHT   = 10.0   # Höhe der Zylinder
+ICON_HEIGHT   = 6.0   # Höhe der Zylinder
 
 
 # BOX LENGTH = 286
@@ -274,7 +274,7 @@ def get_card_and_trophy_insert():
     card_cutouts, cards_depth = get_card_cutouts()
     card_cutouts.translate(App.Vector(
         (INSERTER_WIDTH - CARD_WIDTH)/2,
-        CARD_WALL_DISANCE,
+        CARD_WALL_DISANCE/2,
         BOTTOM_THICKNESS,
     ))
     insert = insert.cut(card_cutouts)
@@ -294,7 +294,7 @@ def get_card_tray_depth():
     no_card_depths = len(CARD_DEPTHS)
     for i in range(no_card_depths):
         full_depth = full_depth + CARD_DEPTHS[i] + SEPERATOR_WIDTH
-    return full_depth - SEPERATOR_WIDTH + CARD_WALL_DISANCE*2
+    return full_depth - SEPERATOR_WIDTH + CARD_WALL_DISANCE*1.5
     
 def get_trophy_tray_height():
     return BOTTOM_THICKNESS + TROPHY_TOP_HEIGHT + TROPHY_BOT_HEIGHT

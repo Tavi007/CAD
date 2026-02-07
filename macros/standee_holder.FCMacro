@@ -40,7 +40,8 @@ def main():
 def create_standee_holder():
     shape = Part.makeCylinder(BASE_RADIUS, BASE_HEIGHT)
     shape = shape.fuse(create_holder())
-    shape = shape.fuse(create_nub())
+    if NUB_HEIGHT > BASE_HEIGHT:
+        shape = shape.fuse(create_nub())
     return shape
 
 def create_holder():

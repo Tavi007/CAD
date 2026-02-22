@@ -1,0 +1,64 @@
+import FreeCAD as App
+import Part
+from math import sqrt, pi
+from dataclasses import dataclass
+import itertools
+
+
+# =====================
+# PARAMETERS
+# =====================
+
+
+# 
+BASE_RADIUS = 10
+BASE_HEIGHT = 2
+
+HOLDER_HEIGHT = 5 + BASE_HEIGHT
+HOLDER_WIDTH = 10
+HOLDER_SLIT_DEPTH = 2
+HOLDER_WALL_DEPTH = 1
+
+NUB_HEIGHT = 3 + BASE_HEIGHT
+NUB_WIDTH = 1.7
+
+
+def main():
+    shape = create_standee_holder()
+    if not shape:
+        return
+
+    doc = App.ActiveDocument
+    if doc is None:
+        doc = App.newDocument("StandeeHolder")
+
+    obj = doc.addObject("Part::Feature", "StandeeHolder")
+    obj.Shape = shape
+    doc.recompute()
+
+
+def create_standee_holder():
+    shape = Part.makeCylinder(BASE_RADIUS, BASE_HEIGHT)
+    shape = shape.fuse(create_holder())
+    if NUB_HEIGHT > BASE_HEIGHT:
+        shape = shape.fuse(create_nub())
+    return shape
+
+def create_holder():
+    shape = Part.makeBox(HOLDER_WIDTH, HOLDER_SLIT_DEPTH + 2*HOLDER_WALL_DEPTH, HOLDER_HEIGHT)
+    slit = Part.makeBox(HOLDER_WIDTH, HOLDER_SLIT_DEPTH, HOLDER_HEIGHT)
+    slit.translate(App.Vector(0,HOLDER_WALL_DEPTH,0))
+    shape = shape.cut(slit)
+    shape = shape.makeFillet(0.25, shape.Edges)
+    shape.translate(App.Vector(-HOLDER_WIDTH/2, -(HOLDER_SLIT_DEPTH + 2*HOLDER_WALL_DEPTH)/2, 0))
+    return shape
+
+def create_nub():
+    shape = Part.makeBox(NUB_WIDTH, HOLDER_SLIT_DEPTH + 2*HOLDER_WALL_DEPTH, NUB_HEIGHT)
+    shape.translate(App.Vector(-NUB_WIDTH/2, -(HOLDER_SLIT_DEPTH + 2*HOLDER_WALL_DEPTH)/2, 0))
+    shape = shape.makeFillet(0.5, shape.Edges)
+    return shape
+
+
+if __name__ == "__main__":
+    main()

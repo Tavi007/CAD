@@ -1,9 +1,6 @@
-
-
-
 import FreeCAD as App
 import Part
-from math import sqrt, pi
+from math import sqrt, pi, cos, sin, radians
 from dataclasses import dataclass
 import itertools
 
@@ -16,125 +13,403 @@ MAX_WIDTH = 220
 MAX_DEPTH = 220
 MAX_HEIGHT = 220
 
-# Space left for width: 135
-# Space needed for trophies chip: 35 + clearance
-TROPHY_CLEARANCE = 1.5
-TROPHY_TOP_WIDTH = 35 + TROPHY_CLEARANCE
-TROPHY_TOP_HEIGHT = 23 + TROPHY_CLEARANCE
-TROPHY_BOT_WIDTH = 20 + TROPHY_CLEARANCE
-TROPHY_BOT_HEIGHT = 7 + TROPHY_CLEARANCE
-
-TROPHY_DEPTH = 9 + TROPHY_CLEARANCE
-NO_TROPHIES = 7 
-
-# Tray
-SEPERATOR_WIDTH = 1.5
-BOTTOM_THICKNESS = 2.5
-
-# card dimensions
-CARD_CLEARANCE = 2
-CARD_WIDTH = 89.0 + CARD_CLEARANCE
-CARD_HEIGHT = 64.0 + CARD_CLEARANCE
-CARD_DEPTHS = [36, 36, 26, 16, 3] # A, B, C cards, start decks, gameplay 
-#CARD_DEPTHS = [2, 8, 6] # solo, bot, trainer 
-CARD_DEPTHS = [d + CARD_CLEARANCE for d in CARD_DEPTHS]
-
-
-# BOX LENGTH = 285
-
-CUTOUT_RADIUS = 25
-
+# MAGNETS
 MAGNET_CLEARANCE = 0.3
 MAGNET_RADIUS = 3 + MAGNET_CLEARANCE
 MAGNET_HEIGHT = 3 + MAGNET_CLEARANCE
 
+# Tray
+SEPERATOR_WIDTH = 1.5
+FILLET = 2.5
+BOTTOM_THICKNESS = 1.5
+OUTER_WALL_DEPTH = MAGNET_HEIGHT + 1
+
+# card dimensions
+CARD_CLEARANCE = 1.3
+CARD_WIDTH = 90.0 + CARD_CLEARANCE
+CARD_HEIGHT = 64.0 + CARD_CLEARANCE
+CARD_DEPTHS = [36, 36, 26, 18, 5, 10] # A, B, C cards, start decks, tournier plan, misc
+CARD_DEPTHS = [d + CARD_CLEARANCE for d in CARD_DEPTHS]
+CARD_ACCESS_RADIUS = 25
+CARD_WALL_DISANCE = 10
+
+# TROPHIES
+TROPHY_CLEARANCE = 0.3
+TROPHY_TOP_DEPTH = 32 + TROPHY_CLEARANCE
+TROPHY_TOP_HEIGHT = 24 + TROPHY_CLEARANCE
+TROPHY_BOT_DEPTH = 20 + TROPHY_CLEARANCE
+TROPHY_BOT_HEIGHT = 7 + TROPHY_CLEARANCE
+TROPHY_WIDTH = 9.5 + TROPHY_CLEARANCE
+NO_TROPHY_TRAYS = 7
+TROPHY_ACCESS_RADIUS = 10
+TROPHY_SEPERATOR_WIDTH = 4.5
+
+# Chips
+NO_CHIPS = 4
+CHIP_CLEARANCE = 0.4
+CHIP_RADIUS = 15.5 + CHIP_CLEARANCE
+CHIP_HEIGHT = (7.5 + CHIP_CLEARANCE)*NO_CHIPS
+CHIP_ACCESS_RADIUS = 10
+
+# icons
+ICON_DISTANCE = 16.0   # Abstand vom Mittelpunkt zu den äußeren Zylindern
+ICON_RADIUS  = 6 + CHIP_CLEARANCE    # Radius der Zylinder
+ICON_HEIGHT   = 6.0   # Höhe der Zylinder
 
 
+# BOX LENGTH = 286
+INSERTER_WIDTH = 105 
+INSERTER_DEPTH = 210 # half of box length
+INSERTER_HEIGHT = 66
 
 @dataclass
 class Cutout:
     position: App.Vector
-    width: int
-    height: int
-    depth: int
+    width: float
+    height: float
+    depth: float
     
-    def get_box(self):
+    def get_shape(self):
         box = Part.makeBox(self.width, self.depth, self.height)
-        #box = outer_box.makeFillet(SEPERATOR_WIDTH/2, outer_box.Edges)
-        box = box.translate(self.position)
+        box.translate(self.position)
         return box
         
+@dataclass
+class FingerAccess:
+    position: App.Vector
+    radius: float
+    length: float
+    direction: App.Vector
+    
+    def get_shape(self):
+        cylinder = Part.makeCylinder(self.radius, self.length)
+        if not self.direction == App.Vector(0, 0, 1):
+            axis = App.Vector(0, 0, 1).cross(self.direction)
+            angle = App.Vector(0, 0, 1).getAngle(self.direction)
+            cylinder.rotate(App.Vector(0, 0, 0), axis, angle * 180 / pi)
+        cylinder.translate(self.position)
+        return cylinder
+        
+@dataclass
+class CardCutout:
+    position: App.Vector
+    depth: float
+    access: float
+    
+    def get_shape(self):
+        box = Part.makeBox(CARD_WIDTH, self.depth, CARD_HEIGHT)
+        access = FingerAccess(
+            App.Vector(
+                CARD_WIDTH/2,
+                -self.access,
+                CARD_HEIGHT,
+            ),
+            CARD_ACCESS_RADIUS,
+            self.depth + self.access*2,
+            App.Vector(0, 1, 0)
+        )
+        shape = box.fuse(access.get_shape())
+        shape.translate(self.position)
+        return shape
+
+@dataclass
+class TrophyCutout:
+    position: App.Vector
+    access:float
+    
+    def get_shape(self):
+        top_position = App.Vector(
+            0, 
+            0, 
+            TROPHY_BOT_HEIGHT
+        )
+        top = Cutout(
+            top_position, 
+            TROPHY_WIDTH, 
+            TROPHY_TOP_HEIGHT,
+            TROPHY_TOP_DEPTH, 
+        )
+        bot_position = App.Vector(
+            0, 
+            (TROPHY_TOP_DEPTH - TROPHY_BOT_DEPTH)/2, 
+            0,
+        )
+        bot = Cutout(
+            bot_position, 
+            TROPHY_WIDTH, 
+            TROPHY_BOT_HEIGHT, 
+            TROPHY_BOT_DEPTH, 
+        )
+        access = FingerAccess(
+            App.Vector(
+                -self.access,
+                TROPHY_TOP_DEPTH/2,
+                TROPHY_TOP_HEIGHT + TROPHY_BOT_HEIGHT,
+            ),
+            TROPHY_ACCESS_RADIUS,
+            TROPHY_WIDTH + self.access*2,
+            App.Vector(1,0,0),
+        ) 
+        shape = top.get_shape().fuse(bot.get_shape()).fuse(access.get_shape())
+        shape.translate(self.position)
+        return shape
+        
+@dataclass
+class MagnetHoleCutout:
+    position: App.Vector
+    direction: App.Vector
+    
+    def get_shape(self):
+        hole1 = FingerAccess(
+            self.position,
+            MAGNET_RADIUS,
+            MAGNET_HEIGHT,
+            self.direction,
+        )
+        hole2 = FingerAccess(
+            self.position,
+            MAGNET_RADIUS,
+            MAGNET_HEIGHT,
+            -self.direction,
+        )
+        return hole1.get_shape().fuse(hole2.get_shape())  
 
 # =====================
 # MAIN
 # =====================
 
 def main():
-    shape = create_card_holder()
-    if not shape:
-        print("Shape won't fit in the print volume!")
-        return
+    doc = App.newDocument("ChallengerCardTrays")
 
-    doc = App.ActiveDocument
-    if doc is None:
-        doc = App.newDocument("ChallengerCardTrays")
-
+    chip_insert = get_chip_insert()
+    chip_insert.translate(App.Vector(
+        0,
+        get_card_tray_depth(),
+        get_trophy_tray_height()
+    ))
+    card_insert = get_card_and_trophy_insert()
+    
+    magnet_holes = get_magnet_cutouts()
+    for hole in magnet_holes:
+        card_insert = card_insert.cut(hole)
+        chip_insert = chip_insert.cut(hole)
+    
+    
+    obj = doc.addObject("Part::Feature", "ChipInsert")
+    obj.Shape = chip_insert
+    
     obj = doc.addObject("Part::Feature", "CardTrays")
-    obj.Shape = shape
-    doc.recompute()
+    obj.Shape = card_insert
 
+def get_magnet_cutouts():
+    x_positions = [
+        MAGNET_RADIUS + SEPERATOR_WIDTH*2, 
+        INSERTER_WIDTH - MAGNET_RADIUS - SEPERATOR_WIDTH*2
+    ]
+    
+    magnet_holes = []
+    for x in x_positions:
+        magnet_holes.append(
+            MagnetHoleCutout(
+                App.Vector(
+                    x,
+                    get_card_tray_depth(),
+                    get_trophy_tray_height() + get_chip_tray_height()/2,
+                ),
+                App.Vector(0,1,0),
+            ).get_shape()
+        )
+    return magnet_holes
+      
+
+def edges_on_z_plane(shape, z_value, tol=1e-6):
+    edges = []
+    for e in shape.Edges:
+        z0 = e.Vertexes[0].Point.z
+        z1 = e.Vertexes[1].Point.z
+        if abs(z0 - z_value) < tol and abs(z1 - z_value) < tol:
+            edges.append(e)
+    return edges
+    
+def edges_with_constant_z(shape, tol=1e-6):
+    edges = []
+    for e in shape.Edges:
+        z_vals = [v.Point.z for v in e.Vertexes]
+        if max(z_vals) - min(z_vals) < tol:
+            edges.append(e)
+    return edges
+
+
+def get_card_and_trophy_insert():
+    insert = Part.makeBox(INSERTER_WIDTH, INSERTER_DEPTH, INSERTER_HEIGHT)
+    to_cut = Part.makeBox(INSERTER_WIDTH, INSERTER_DEPTH, INSERTER_HEIGHT)
+    card_tray_depth = get_card_tray_depth()
+    trophy_tray_height = get_trophy_tray_height()
+    to_cut.translate(App.Vector(
+        0,
+        card_tray_depth,
+        trophy_tray_height,
+    ))
+    insert = insert.cut(to_cut)
+    
+    
+    inner_edges = []
+    for e in insert.Edges:
+        if (abs(e.Vertexes[0].Point.y - card_tray_depth) < 1e-6 and 
+            abs(e.Vertexes[1].Point.y - card_tray_depth) < 1e-6 and 
+            abs(e.Vertexes[0].Point.z - trophy_tray_height) < 1e-6 and 
+            abs(e.Vertexes[1].Point.z - trophy_tray_height) < 1e-6):
+            inner_edges.append(e)
+    insert = insert.makeFillet(FILLET/2, inner_edges)
+    
+    outer_edges = []
+    for e in insert.Edges:
+        if not (abs(e.Vertexes[0].Point.y - card_tray_depth) < 1e-6 and 
+            abs(e.Vertexes[1].Point.y - card_tray_depth) < 1e-6 and 
+            abs(e.Vertexes[0].Point.z - trophy_tray_height) < 1e-6 and 
+            abs(e.Vertexes[1].Point.z - trophy_tray_height) < 1e-6):
+            outer_edges.append(e)
+    insert = insert.makeFillet(FILLET, outer_edges)
+    
+    card_cutouts, cards_depth = get_card_cutouts()
+    card_cutouts.translate(App.Vector(
+        (INSERTER_WIDTH - CARD_WIDTH)/2,
+        CARD_WALL_DISANCE/2,
+        BOTTOM_THICKNESS,
+    ))
+    insert = insert.cut(card_cutouts)
+    
+    trophy_cutouts, trophy_width = get_trophy_cutouts()
+    trophy_cutouts.translate(App.Vector(
+        (INSERTER_WIDTH - trophy_width)/2,
+        (INSERTER_DEPTH - TROPHY_TOP_DEPTH + get_card_tray_depth())/2,
+        BOTTOM_THICKNESS
+    ))
+    insert = insert.cut(trophy_cutouts)
+    
+    return insert
+    
+def get_card_tray_depth():
+    full_depth = 0
+    no_card_depths = len(CARD_DEPTHS)
+    for i in range(no_card_depths):
+        full_depth = full_depth + CARD_DEPTHS[i] + SEPERATOR_WIDTH
+    return full_depth - SEPERATOR_WIDTH + CARD_WALL_DISANCE*1.5
+    
+def get_trophy_tray_height():
+    return BOTTOM_THICKNESS + TROPHY_TOP_HEIGHT + TROPHY_BOT_HEIGHT
+    
+def get_chip_tray_height():
+    return INSERTER_HEIGHT - get_trophy_tray_height()
+
+def get_chip_insert():
+    width = INSERTER_WIDTH
+    depth = INSERTER_DEPTH - get_card_tray_depth()
+    height = get_chip_tray_height()
+    
+    insert = Part.makeBox(width, depth, height)
+    insert = insert.makeFillet(FILLET, insert.Edges)
+    cutout, cutout_width = get_chip_cutout()
+    cutout.translate(App.Vector(
+        0,
+        depth/2,
+        height - CHIP_RADIUS,
+    ))
+    insert = insert.cut(cutout)
+    
+    # 7 holes for set icons
+    middle = App.Vector(width * 3/4,depth/2,height-ICON_HEIGHT)
+    
+    mid_cyl = Part.makeCylinder(ICON_RADIUS, ICON_HEIGHT, middle)
+    insert = insert.cut(mid_cyl)
+    for i in range(6):
+        angle = radians(60 * i)
+        x = ICON_DISTANCE * cos(angle)
+        y = ICON_DISTANCE * sin(angle)
+        cyl = Part.makeCylinder(
+            ICON_RADIUS,
+            ICON_HEIGHT,
+            middle + App.Vector(x, y, 0)
+        )
+        insert = insert.cut(cyl)
+    
+    return insert
 
 # =====================
 # CARD HOLDER
 # =====================
-
-def create_card_holder():
-    outer_depth = SEPERATOR_WIDTH
+def get_card_cutouts():
+    access = 10
+    full_depth = 0
     cutouts = []
-    for i in range(len(CARD_DEPTHS)):
+    no_card_depths = len(CARD_DEPTHS)
+    for i in range(no_card_depths):
         depth = CARD_DEPTHS[i]
-        position = App.Vector(SEPERATOR_WIDTH, outer_depth, BOTTOM_THICKNESS)
-        outer_depth = outer_depth +  depth + SEPERATOR_WIDTH
-        cutouts.append(Cutout(
-            position, 
-            CARD_WIDTH, 
-            CARD_HEIGHT, 
-            depth,
-        ))
-    
-    
-    outer_width = CARD_WIDTH + SEPERATOR_WIDTH*2
-    outer_height = CARD_HEIGHT + BOTTOM_THICKNESS -10
-    outer_box = Part.makeBox(outer_width, outer_depth, outer_height)
+        position = App.Vector(0, full_depth, 0)
+        cutouts.append(
+            CardCutout(
+                position, 
+                depth,
+                access
+            )
+        )
+        full_depth = full_depth +  depth + SEPERATOR_WIDTH
+    shape = cutouts[0].get_shape()
+    for i in range(1, no_card_depths):
+        shape = shape.fuse(cutouts[i].get_shape())
+    return shape, full_depth + SEPERATOR_WIDTH
 
-    for i in range(len(cutouts)):
-        inner_box = cutouts[i].get_box()
-        outer_box = outer_box.cut(inner_box)
-    
-    
-    outer_box = outer_box.cut(get_finger_cut_out(outer_depth))
-    print(f"Dimensions: {outer_width} x {outer_depth} x {outer_height} mm³")
-    outer_box = outer_box.makeFillet(SEPERATOR_WIDTH/2.1, outer_box.Edges)
+# =====================
+# TROPHIES HOLDER
+# =====================
+def get_trophy_cutouts():
+    access = 10
+    cutouts = []
+    width = 0
+    for i in range(NO_TROPHY_TRAYS):
+        cutouts.append(
+            TrophyCutout(
+                App.Vector(width,0,0),
+                access,
+            )
+        )
+        width = width +  TROPHY_WIDTH + TROPHY_SEPERATOR_WIDTH
+    shape = cutouts[0].get_shape()
+    for i in range(1, NO_TROPHY_TRAYS):
+        shape = shape.fuse(cutouts[i].get_shape())
+    return shape, width-TROPHY_SEPERATOR_WIDTH
 
-    return outer_box
+# =====================
+# CHIP HOLDER
+# =====================
+def get_chip_cutout():
+    access = 10
+    shape = FingerAccess(
+        App.Vector(access,0,0),
+        CHIP_RADIUS,
+        CHIP_HEIGHT,
+        App.Vector(1,0,0),
+    ).get_shape()
     
+    box = Part.makeBox(CHIP_HEIGHT,CHIP_RADIUS*2,CHIP_RADIUS*2)
+    box.translate(App.Vector(
+        access,
+        -CHIP_RADIUS,
+        0,
+    ))
     
-def get_finger_cut_out(depth):
-    cylinder = Part.makeCylinder(CUTOUT_RADIUS, depth)
-
-    direction = App.Vector(0, 1, 0)
-    axis = App.Vector(0, 0, 1).cross(direction)
-    angle = App.Vector(0, 0, 1).getAngle(direction)
-    cylinder.rotate(App.Vector(0, 0, 0), axis, angle * 180 / pi)
-
-    position = App.Vector(CARD_WIDTH/2 + SEPERATOR_WIDTH, 0, CARD_HEIGHT + BOTTOM_THICKNESS)
-    cylinder.translate(position)
-    return cylinder
-
+    access_shape = FingerAccess(
+        App.Vector(0,0,CHIP_RADIUS),
+        CHIP_ACCESS_RADIUS,
+        CHIP_HEIGHT + access*2,
+        App.Vector(1,0,0),
+    ) 
+    
+    shape = shape.fuse(box).fuse(access_shape.get_shape())
+    return shape, CHIP_HEIGHT + access*2
 
 # =====================
 # ENTRY POINT
 # =====================
-
 if __name__ == "__main__":
     main()

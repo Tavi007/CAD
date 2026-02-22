@@ -1,0 +1,117 @@
+
+
+
+import FreeCAD as App
+import Part
+from math import sqrt, pi
+from dataclasses import dataclass
+import itertools
+
+# =====================
+# PARAMETERS
+# =====================
+
+# printer
+MAX_WIDTH = 220
+MAX_DEPTH = 220
+MAX_HEIGHT = 220
+
+# Tray
+BOT_TRAY_WIDTH = 73
+BOT_TRAY_DEPTH = 40
+BOT_TRAY_HEIGHT = 20
+TOP_TRAY_WIDTH = 75
+TOP_TRAY_DEPTH = 42
+TOP_TRAY_HEIGHT = 10
+
+WALL_THICKNESS = 2
+
+
+
+# =====================
+# MAIN
+# =====================
+
+def main():
+    shape = create_fan_tray()
+    if not shape:
+        print("Shape won't fit in the print volume!")
+        return
+
+    doc = App.ActiveDocument
+    if doc is None:
+        doc = App.newDocument("ChallengerFanTray")
+
+    obj = doc.addObject("Part::Feature", "FanTray")
+    obj.Shape = shape
+    doc.recompute()
+
+
+# =====================
+# CARD HOLDER
+# =====================
+
+def create_fan_tray():
+    tray = get_trapezoid(
+        TOP_TRAY_WIDTH, 
+        TOP_TRAY_DEPTH,
+        TOP_TRAY_HEIGHT + BOT_TRAY_HEIGHT,
+        BOT_TRAY_WIDTH, 
+        BOT_TRAY_DEPTH, 
+        BOT_TRAY_HEIGHT
+    )
+    negativ = get_trapezoid(
+        TOP_TRAY_WIDTH - WALL_THICKNESS, 
+        TOP_TRAY_DEPTH - WALL_THICKNESS,
+        TOP_TRAY_HEIGHT + BOT_TRAY_HEIGHT,
+        BOT_TRAY_WIDTH - WALL_THICKNESS, 
+        BOT_TRAY_DEPTH - WALL_THICKNESS, 
+        BOT_TRAY_HEIGHT
+    )
+    negativ.translate(App.Vector(0,0,WALL_THICKNESS))
+    tray = tray.cut(negativ)
+    return tray
+
+def get_trapezoid(top_width, top_depth, top_height,
+                  mid_width, mid_depth, mid_height):
+    if top_height == mid_height:
+        raise ValueError("mid_height darf nicht gleich top_height sein.")
+    
+    # --- X-Richtung (Wände parallel zur X-Achse) ---
+    kx = ((top_width/2) - (mid_width/2)) / (top_height - mid_height)
+    ax = (mid_width/2) - kx * mid_height
+    
+    bottom_width = 2 * ax
+    
+    # --- Y-Richtung (Wände parallel zur Y-Achse) ---
+    ky = ((top_depth/2) - (mid_depth/2)) / (top_height - mid_height)
+    ay = (mid_depth/2) - ky * mid_height
+    
+    bottom_depth = 2 * ay
+    
+    # --- Punkte unten (z=0) ---
+    p1 = App.Vector(-bottom_width/2, -bottom_depth/2, 0)
+    p2 = App.Vector( bottom_width/2, -bottom_depth/2, 0)
+    p3 = App.Vector( bottom_width/2,  bottom_depth/2, 0)
+    p4 = App.Vector(-bottom_width/2,  bottom_depth/2, 0)
+    
+    # --- Punkte oben (z=top_height) ---
+    p5 = App.Vector(-top_width/2, -top_depth/2, top_height)
+    p6 = App.Vector( top_width/2, -top_depth/2, top_height)
+    p7 = App.Vector( top_width/2,  top_depth/2, top_height)
+    p8 = App.Vector(-top_width/2,  top_depth/2, top_height)
+    
+    bottom_wire = Part.makePolygon([p1, p2, p3, p4, p1])
+    top_wire    = Part.makePolygon([p5, p6, p7, p8, p5])
+    
+    solid = Part.makeLoft([bottom_wire, top_wire], True)
+    solid = solid.makeFillet(WALL_THICKNESS/2, solid.Edges)
+    
+    return solid
+
+# =====================
+# ENTRY POINT
+# =====================
+
+if __name__ == "__main__":
+    main()

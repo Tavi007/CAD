@@ -1,0 +1,154 @@
+
+
+
+import FreeCAD as App
+import Part
+from math import sqrt, pi, acos, cos, sin
+from dataclasses import dataclass
+import itertools
+
+# =====================
+# PARAMETERS
+# =====================
+
+# printer
+MAX_WIDTH = 220
+MAX_DEPTH = 220
+MAX_HEIGHT = 220
+
+# Base
+BASE_WIDTH = 219.5
+BASE_DEPTH = 143.5
+BASE_HEIGHT = 39.5
+
+# Label
+LABEL_TRAY_WIDTH = 1
+LABEL_TRAY_DEPTH = 1
+LABEL_TRAY_HEIGHT = 1
+
+# Card
+CARD_R1 = 10
+CARD_R2 = 5
+CARD_R_DISTANCE = 13
+
+
+# Bowl
+BOWL_DEPTH = 75
+BOWL_HEIGHT = LABEL_TRAY_HEIGHT
+
+
+WALL_THICKNESS = 2
+
+
+
+# =====================
+# MAIN
+# =====================
+
+def main():
+    C1 = App.Vector(0,0,0)
+    C2 = App.Vector(10,0,0)
+    
+    shape = create_tear_shape(C1, 3, C2, 3, 2)
+    if not shape:
+        print("Shape won't fit in the print volume!")
+        return
+
+    doc = App.ActiveDocument
+    if doc is None:
+        doc = App.newDocument("Base")
+
+    obj = doc.addObject("Part::Feature", "Base")
+    obj.Shape = shape
+    doc.recompute()
+
+
+# =====================
+# CARD HOLDER
+# =====================
+
+def create_base_tray():
+    
+    tray = None
+    return tray
+
+def get_card_tray_negativ():
+    solid = None
+    
+    return solid
+    
+# C1/C2 position
+# R1/R2 radius 
+def create_tear_shape(C1, R1, C2, R2, h):
+    d_vec = C2 - C1
+    d = d_vec.Length
+    
+    if d == 0:
+        raise ValueError("Kreise haben denselben Mittelpunkt")
+    
+    ex = d_vec.normalize()
+    
+    # Unterschied der Radien
+    dr = R2 - R1
+    
+    # Winkel für äußere Tangenten
+    alpha = acos(dr / d)
+    
+    # Orthogonale Richtung
+    ey = App.Vector(-ex.y, ex.x, 0)
+    
+    # Tangentenrichtungen
+    t1 = ex * cos(alpha) + ey * sin(alpha)
+    t2 = ex * cos(alpha) - ey * sin(alpha)
+    
+    # -----------------------
+    # Tangentialpunkte
+    # -----------------------
+    P1a = C1 + t1 * R1
+    P2a = C2 + t1 * R2
+    
+    P1b = C1 + t2 * R1
+    P2b = C2 + t2 * R2
+    
+    # -----------------------
+    # Geometrie erzeugen
+    # -----------------------
+    print(P1a)
+    print(C1 + (P1a - C1).normalize() * R1)
+    print(P2a)
+    print(P1b)
+    print(C2 + (P2b - C2).normalize() * R2)
+    print(P2b)
+    # Kreisbögen
+    arc1 = Part.Arc(
+        P1a,
+        C1 + (P1a - C1).normalize() * R1,
+        P1b
+    ).toShape()
+    
+    arc2 = Part.Arc(
+        P2b,
+        C2 + (P2b - C2).normalize() * R2,
+        P2a
+    ).toShape()
+    
+    # Tangentenlinien
+    line1 = Part.LineSegment(P1a, P2a).toShape()
+    line2 = Part.LineSegment(P1b, P2b).toShape()
+    
+    # Wire schließen
+    wire = Part.Wire([arc1, line1, arc2, line2])
+    
+    # Face erzeugen
+    face = Part.Face(wire)
+    
+    # Extrusion
+    solid = face.extrude(App.Vector(0, 0, h))
+    return solid
+
+# =====================
+# ENTRY POINT
+# =====================
+
+if __name__ == "__main__":
+    main()

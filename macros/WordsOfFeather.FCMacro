@@ -17,27 +17,37 @@ MAX_DEPTH = 220
 MAX_HEIGHT = 220
 
 # Base
-BASE_WIDTH = 219.5
-BASE_DEPTH = 143.5
-BASE_HEIGHT = 39.5
+BASE_DEPTH = 212
+BASE_WIDTH = 170.1
+TRAY_HEIGHT = 34.5
+WALL_THICKNESS = 0.7
 
-# Label
-LABEL_TRAY_WIDTH = 1
-LABEL_TRAY_DEPTH = 1
-LABEL_TRAY_HEIGHT = 1
+# Bowl
+BOWL_WIDTH = 103.5
+BOWL_DEPTH = 115
 
 # Card
+CARD_TRAY_WIDTH = BASE_WIDTH - BOWL_WIDTH - 3*WALL_THICKNESS
+CARD_TRAY_DEPTH = BOWL_DEPTH
 CARD_R1 = 10
 CARD_R2 = 5
 CARD_R_DISTANCE = 13
 
+# Label
+LABEL_TRAY_WIDTH = 130
+LABEL_TRAY_DEPTH = 40
 
-# Bowl
-BOWL_DEPTH = 75
-BOWL_HEIGHT = LABEL_TRAY_HEIGHT
+# Pen
+PEN_TRAY_WIDTH = LABEL_TRAY_WIDTH
+PEN_TRAY_DEPTH = BASE_DEPTH - BOWL_DEPTH - LABEL_TRAY_DEPTH - 4*WALL_THICKNESS
+
+# Gem
+GEM_TRAY_WIDTH = BASE_WIDTH - LABEL_TRAY_WIDTH - 3*WALL_THICKNESS
+GEM_TRAY_DEPTH = BASE_DEPTH - BOWL_DEPTH - 3*WALL_THICKNESS
 
 
-WALL_THICKNESS = 2
+
+
 
 
 
@@ -46,27 +56,78 @@ WALL_THICKNESS = 2
 # =====================
 
 def main():
-    C1 = App.Vector(0,0,0)
-    C2 = App.Vector(10,0,0)
-    
-    shape = create_tear_shape(C1, 3, C2, 3, 2)
-    if not shape:
-        print("Shape won't fit in the print volume!")
-        return
+    #C1 = App.Vector(0,0,0)
+    #C2 = App.Vector(10,0,0)
 
     doc = App.ActiveDocument
     if doc is None:
         doc = App.newDocument("Base")
+    
+    
+    
+    #create_tear_shape(doc, C1, 19, C2, 6, 2)
 
     obj = doc.addObject("Part::Feature", "Base")
-    obj.Shape = shape
+    obj.Shape = create_pen_gem_and_label_tray()
     doc.recompute()
 
 
+def create_basic_tray(width, depth, height, with_finger_access):
+    outer_box = Part.makeBox(width+2*WALL_THICKNESS, depth+2*WALL_THICKNESS, height+WALL_THICKNESS)
+    inner_box = Part.makeBox(width, depth, height)
+    
+    translation = App.Vector(WALL_THICKNESS, WALL_THICKNESS, WALL_THICKNESS)
+    inner_box = inner_box.translate(translation)
+    outer_box = outer_box.cut(inner_box)
+    
+    if with_finger_access:
+        finger_access = Part.makeBox(width/3, depth/4, height+WALL_THICKNESS)
+        translation = App.Vector(width/3+WALL_THICKNESS, 0, 0)
+        finger_access = finger_access.translate(translation)
+        outer_box = outer_box.cut(finger_access)
+    
+    return outer_box
+    
+def create_bowl_and_card_tray():
+    card_tray = create_basic_tray(CARD_TRAY_WIDTH, CARD_TRAY_DEPTH, TRAY_HEIGHT, False)
+    bowl_tray = create_basic_tray(BOWL_WIDTH, BOWL_DEPTH, TRAY_HEIGHT, False)
+    
+    translation = App.Vector(CARD_TRAY_WIDTH+WALL_THICKNESS, 0, 0)
+    bowl_tray = bowl_tray.translate(translation)
+    tray = card_tray.fuse(bowl_tray)
+    
+    finger_access = Part.makeBox(CARD_TRAY_WIDTH/2+WALL_THICKNESS, CARD_TRAY_DEPTH/3, TRAY_HEIGHT+WALL_THICKNESS)
+    translation = App.Vector(CARD_TRAY_WIDTH+WALL_THICKNESS/2-CARD_TRAY_WIDTH/4, CARD_TRAY_DEPTH/3+WALL_THICKNESS, 0)
+    finger_access = finger_access.translate(translation)
+    tray = tray.cut(finger_access)
+    
+    return tray
+    
+def create_pen_gem_and_label_tray():
+    label_tray = create_basic_tray(LABEL_TRAY_WIDTH, LABEL_TRAY_DEPTH, TRAY_HEIGHT, False)
+    pen_tray = create_basic_tray(PEN_TRAY_WIDTH, PEN_TRAY_DEPTH, TRAY_HEIGHT, False)
+    gem_tray = create_basic_tray(GEM_TRAY_WIDTH, GEM_TRAY_DEPTH, TRAY_HEIGHT, False)
+    
+    translation = App.Vector(GEM_TRAY_WIDTH+WALL_THICKNESS, 0, 0)
+    label_tray = label_tray.translate(translation)
+    pen_tray = pen_tray.translate(translation)
+    translation = App.Vector(0,LABEL_TRAY_DEPTH+WALL_THICKNESS, 0)
+    pen_tray = pen_tray.translate(translation)
+    tray = gem_tray.fuse(label_tray)
+    tray = tray.fuse(pen_tray)
+    
+    finger_access = Part.makeBox(LABEL_TRAY_WIDTH/3, LABEL_TRAY_DEPTH/2+WALL_THICKNESS, TRAY_HEIGHT+WALL_THICKNESS)
+    dx = GEM_TRAY_WIDTH + LABEL_TRAY_WIDTH/3
+    dy = LABEL_TRAY_DEPTH*3/4 + WALL_THICKNESS/2 
+    finger_access = finger_access.translate( App.Vector(dx, dy, 0))
+    tray = tray.cut(finger_access)
+    
+    return tray
+    
+    
 # =====================
 # CARD HOLDER
 # =====================
-
 def create_base_tray():
     
     tray = None
@@ -79,72 +140,128 @@ def get_card_tray_negativ():
     
 # C1/C2 position
 # R1/R2 radius 
-def create_tear_shape(C1, R1, C2, R2, h):
-    d_vec = C2 - C1
-    d = d_vec.Length
+def create_tear_shape(doc, C1, R1, C2, R2, h):
+    sk = doc.addObject("Sketcher::SketchObject", "TearSketch")
     
-    if d == 0:
-        raise ValueError("Kreise haben denselben Mittelpunkt")
+    # Kreise
+    c1_id = sk.addGeometry(Part.Circle(C1, App.Vector(0,0,1), R1), True)
+    c2_id = sk.addGeometry(Part.Circle(C2, App.Vector(0,0,1), R2), True)
     
-    ex = d_vec.normalize()
+    # Punkte auf Kreisen
+    p1 = C1 + App.Vector(0,R1,0)
+    p2 = C2 + App.Vector(0,R2,0)
     
-    # Unterschied der Radien
-    dr = R2 - R1
+    p3 = C1 + App.Vector(0,-R1,0)
+    p4 = C2 + App.Vector(0,-R2,0)
     
-    # Winkel für äußere Tangenten
-    alpha = acos(dr / d)
+    p1_id, p2_id, l1_id = create_tangent_line(sk, c1_id, c2_id, p1, p2)
+    p3_id, p4_id, l2_id = create_tangent_line(sk, c1_id, c2_id, p3, p4)
     
-    # Orthogonale Richtung
-    ey = App.Vector(-ex.y, ex.x, 0)
+    create_arc(sk, c1_id, p1_id, p3_id)
+    create_arc(sk, c2_id, p2_id, p4_id)
     
-    # Tangentenrichtungen
-    t1 = ex * cos(alpha) + ey * sin(alpha)
-    t2 = ex * cos(alpha) - ey * sin(alpha)
-    
-    # -----------------------
-    # Tangentialpunkte
-    # -----------------------
-    P1a = C1 + t1 * R1
-    P2a = C2 + t1 * R2
-    
-    P1b = C1 + t2 * R1
-    P2b = C2 + t2 * R2
-    
-    # -----------------------
-    # Geometrie erzeugen
-    # -----------------------
-    print(P1a)
-    print(C1 + (P1a - C1).normalize() * R1)
-    print(P2a)
-    print(P1b)
-    print(C2 + (P2b - C2).normalize() * R2)
-    print(P2b)
-    # Kreisbögen
-    arc1 = Part.Arc(
-        P1a,
-        C1 + (P1a - C1).normalize() * R1,
-        P1b
-    ).toShape()
-    
-    arc2 = Part.Arc(
-        P2b,
-        C2 + (P2b - C2).normalize() * R2,
-        P2a
-    ).toShape()
-    
-    # Tangentenlinien
-    line1 = Part.LineSegment(P1a, P2a).toShape()
-    line2 = Part.LineSegment(P1b, P2b).toShape()
-    
-    # Wire schließen
-    wire = Part.Wire([arc1, line1, arc2, line2])
-    
-    # Face erzeugen
-    face = Part.Face(wire)
+    doc.recompute()
     
     # Extrusion
-    solid = face.extrude(App.Vector(0, 0, h))
-    return solid
+    #face = Part.Face(sk.Shape.Wires[0])
+    #solid = face.extrude(App.Vector(0, 0, h))
+    #return solid
+    
+def create_tangent_line(sk, c1_id, c2_id, p1, p2):
+    p1_id = sk.addGeometry(Part.Point(p1), False)
+    p2_id = sk.addGeometry(Part.Point(p2), False)
+    
+    # Constraint: Punkt liegt auf Kreis
+    sk.addConstraint(
+        Sketcher.Constraint(
+            "PointOnObject",
+            p1_id, 1,      # Punkt, Vertex 1
+            c1_id         # Kreis
+        )
+    )
+    sk.addConstraint(
+        Sketcher.Constraint(
+            "PointOnObject",
+            p2_id, 1,      # Punkt, Vertex 1
+            c2_id          # Kreis
+        )
+    )
+
+    # Linie (vorerst irgendwo)
+    l_id = sk.addGeometry(Part.LineSegment(p1, p2), False)
+    
+    sk.addConstraint(
+        Sketcher.Constraint(
+            "Coincident",
+            l_id, 1,
+            p1_id, 1
+        )
+    )
+    sk.addConstraint(
+        Sketcher.Constraint(
+            "Coincident",
+            l_id, 2,
+            p2_id, 1
+        )
+    )
+    
+    sk.addConstraint(
+        Sketcher.Constraint(
+            "Tangent",
+            l_id,
+            c1_id
+        )
+    )
+    sk.addConstraint(
+        Sketcher.Constraint(
+            "Tangent",
+                        l_id,
+            c2_id
+        )
+    )
+    return p1_id, p2_id, l_id
+    
+def create_arc(sk, circle_id, p1_id, p2_id):
+    circle = sk.Geometry[circle_id]
+    center = circle.Center
+    radius = circle.Radius
+    
+    
+    p1 = sk.Geometry[p1_id]
+    p2 = sk.Geometry[p2_id]
+    
+    print(p1.X,p1.Y)
+    print(p2.X,p2.Y)
+    
+    arc_id = sk.addGeometry(
+        Part.ArcOfCircle(
+            App.Vector(p1.X,p1.Y,0),
+            center,
+            App.Vector(p2.X,p2.Y,0),
+        ),
+        False
+    )
+#    sk.addConstraint(
+#        Sketcher.Constraint(
+#            "Coincident",
+#            arc_id, 3,     # Mittelpunkt des Bogens
+#            circle_id, 3   # Mittelpunkt des Kreises
+#        )
+#    )
+#    sk.addConstraint(
+#        Sketcher.Constraint(
+#            "Coincident",
+#            arc_id, 1,     # Startpunkt des Bogens
+#            p1_id, 1
+#        )
+#    )
+#    sk.addConstraint(
+#        Sketcher.Constraint(
+#            "Coincident",
+#            arc_id, 2,     # Endpunkt des Bogens
+#            p2_id, 1
+#        )
+#    )
 
 # =====================
 # ENTRY POINT

@@ -1,0 +1,133 @@
+import sys
+lib_path = "C:\\CAD\\projects\\macros\\lib\\"
+if lib_path not in sys.path:
+    sys.path.append(lib_path)
+import FreeCAD as App
+import Part
+import math
+from lib.shapes import Rectangle
+
+# real 
+rectangle_tableau = Rectangle(0, 0, 500, 300)
+rectangle_tableau.print_me()
+
+#for testing
+rectangle_tableau = Rectangle(0,0, 100, 100)
+
+q_vector = App.Vector(0, 1, 0)
+r_vector = App.Vector(math.sin(2/3*math.pi), math.cos(2/3*math.pi), 0)
+
+# -------------------------------------------------
+# Basis: Hexagon erzeugen
+# -------------------------------------------------
+def create_hexagon(center, radius):
+    points = []
+    for i in range(6):
+        angle = math.radians(60 * i)
+        x = center.x + radius * math.cos(angle)
+        y = center.y + radius * math.sin(angle)
+        points.append(App.Vector(x, y, 0))
+    
+    points.append(points[0])  # schließen
+    polygon = Part.makePolygon(points)
+    return Part.Face(polygon)
+
+
+# -------------------------------------------------
+# Grid Positionen berechnen (nutze axiales koordinatensystem)
+# -------------------------------------------------
+def generate_hex_grid(q_max, r_max, radius, gap):
+    positions = []
+    for q in range(q_max):
+        for r in range(r_max):
+            pos = q*q_vector*(2*radius+gap) + r*r_vector*(2*radius+gap)
+            if rectangle_tableau.is_point_inside(pos.x, pos.y, radius+gap): 
+                positions.append(pos)
+    return positions
+
+
+# -------------------------------------------------
+# Brücke zwischen zwei Hexagon-Zentren
+# -------------------------------------------------
+def create_bridge(p1, p2, width):
+    direction = (p2 - p1)
+    length = direction.Length
+    direction.normalize()
+
+    # Orthogonale Richtung
+    ortho = App.Vector(-direction.y, direction.x, 0)
+
+    half_w = width / 2
+
+    # Rechteckpunkte
+    p_start = p1 + direction * (length * 0.4)
+    p_end   = p1 + direction * (length * 0.6)
+
+    pts = [
+        p_start + ortho * half_w,
+        p_start - ortho * half_w,
+        p_end   - ortho * half_w,
+        p_end   + ortho * half_w,
+        p_start + ortho * half_w
+    ]
+
+    return Part.Face(Part.makePolygon(pts))
+
+
+# -------------------------------------------------
+# Nachbarn finden (für Brücken)
+# -------------------------------------------------
+def find_neighbors(positions, max_dist):
+    pairs = []
+    
+    for i, p1 in enumerate(positions):
+        for j, p2 in enumerate(positions):
+            if j <= i:
+                continue
+            
+            if (p2 - p1).Length < max_dist:
+                pairs.append((p1, p2))
+    
+    return pairs
+
+
+# -------------------------------------------------
+# Gesamtes Grid erzeugen
+# -------------------------------------------------
+def create_honeycomb(rows=5, cols=5, radius=5, gap=1, bridge_width=1):
+
+    positions = generate_hex_grid(rows, cols, radius, gap)
+
+    hexes = [create_hexagon(p, radius) for p in positions]
+
+    # max Abstand für Nachbarsuche
+    neighbor_dist = 2 * radius + gap * 1.5
+    pairs = find_neighbors(positions, neighbor_dist)
+
+    bridges = [create_bridge(p1, p2, bridge_width) for p1, p2 in pairs]
+
+    # Alles zusammenführen
+    compound = Part.makeCompound(hexes + bridges)
+    compound = compound.extrude(FreeCAD.Vector(0,0,3))
+    compound.translate(App.Vector(tableau_width/2,tableau_height/2,3))
+    
+    tableau = Part.makeBox(tableau_width, tableau_height, 5)
+    tableau = tableau.cut(compound)
+
+    doc = App.newDocument()
+    obj = doc.addObject("Part::Feature", "Honeycomb")
+    obj.Shape = tableau
+
+    doc.recompute()
+
+
+# -------------------------------------------------
+# AUSFÜHRUNG
+# -------------------------------------------------
+create_honeycomb(
+    rows=20,
+    cols=20,
+    radius=10,
+    gap=1.0,
+    bridge_width=7
+)

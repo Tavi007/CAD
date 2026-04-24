@@ -17,7 +17,7 @@ MAX_DEPTH = 220
 MAX_HEIGHT = 220
 
 # Base
-BASE_DEPTH = 212
+BASE_DEPTH = 204
 BASE_WIDTH = 170.1
 TRAY_HEIGHT = 34.5
 WALL_THICKNESS = 0.7
@@ -38,12 +38,12 @@ LABEL_TRAY_WIDTH = 130
 LABEL_TRAY_DEPTH = 40
 
 # Pen
-PEN_TRAY_WIDTH = LABEL_TRAY_WIDTH
-PEN_TRAY_DEPTH = BASE_DEPTH - BOWL_DEPTH - LABEL_TRAY_DEPTH - 4*WALL_THICKNESS
+PEN_TRAY_WIDTH = 115
+PEN_TRAY_DEPTH = BASE_DEPTH - BOWL_DEPTH - LABEL_TRAY_DEPTH - WALL_THICKNESS
 
 # Gem
 GEM_TRAY_WIDTH = BASE_WIDTH - LABEL_TRAY_WIDTH - 3*WALL_THICKNESS
-GEM_TRAY_DEPTH = BASE_DEPTH - BOWL_DEPTH - 3*WALL_THICKNESS
+GEM_TRAY_DEPTH = LABEL_TRAY_DEPTH + PEN_TRAY_DEPTH + WALL_THICKNESS
 
 
 
@@ -104,17 +104,34 @@ def create_bowl_and_card_tray():
     return tray
     
 def create_pen_gem_and_label_tray():
-    label_tray = create_basic_tray(LABEL_TRAY_WIDTH, LABEL_TRAY_DEPTH, TRAY_HEIGHT, False)
-    pen_tray = create_basic_tray(PEN_TRAY_WIDTH, PEN_TRAY_DEPTH, TRAY_HEIGHT, False)
-    gem_tray = create_basic_tray(GEM_TRAY_WIDTH, GEM_TRAY_DEPTH, TRAY_HEIGHT, False)
+    tray = Part.makeBox(BASE_WIDTH, BASE_DEPTH - BOWL_DEPTH + 2*WALL_THICKNESS, TRAY_HEIGHT)
+    
+    label_tray = Part.makeBox(LABEL_TRAY_WIDTH, LABEL_TRAY_DEPTH, TRAY_HEIGHT)
+    pen_tray = Part.makeBox(PEN_TRAY_WIDTH, PEN_TRAY_DEPTH, TRAY_HEIGHT)
+    gem_tray1 = Part.makeBox(GEM_TRAY_WIDTH, GEM_TRAY_DEPTH, TRAY_HEIGHT)
+    gem_tray2_width = BASE_WIDTH - PEN_TRAY_WIDTH - 3*WALL_THICKNESS
+    gem_tray2 = Part.makeBox(gem_tray2_width, PEN_TRAY_DEPTH, TRAY_HEIGHT)
+    
+    translation = App.Vector(WALL_THICKNESS, WALL_THICKNESS, WALL_THICKNESS)
+    label_tray = label_tray.translate(translation)
+    pen_tray = pen_tray.translate(translation)
+    gem_tray1 = gem_tray1.translate(translation)
+    gem_tray2 = gem_tray2.translate(translation)
     
     translation = App.Vector(GEM_TRAY_WIDTH+WALL_THICKNESS, 0, 0)
     label_tray = label_tray.translate(translation)
+    
+    translation = App.Vector(0, LABEL_TRAY_DEPTH+WALL_THICKNESS, 0)
     pen_tray = pen_tray.translate(translation)
-    translation = App.Vector(0,LABEL_TRAY_DEPTH+WALL_THICKNESS, 0)
+    gem_tray2 = gem_tray2.translate(translation)
+    
+    translation = App.Vector(gem_tray2_width+WALL_THICKNESS, 0, 0)
     pen_tray = pen_tray.translate(translation)
-    tray = gem_tray.fuse(label_tray)
-    tray = tray.fuse(pen_tray)
+    
+    tray = tray.cut(label_tray)
+    tray = tray.cut(pen_tray)
+    tray = tray.cut(gem_tray1)
+    tray = tray.cut(gem_tray2)
     
     finger_access = Part.makeBox(LABEL_TRAY_WIDTH/3, LABEL_TRAY_DEPTH/2+WALL_THICKNESS, TRAY_HEIGHT+WALL_THICKNESS)
     dx = GEM_TRAY_WIDTH + LABEL_TRAY_WIDTH/3

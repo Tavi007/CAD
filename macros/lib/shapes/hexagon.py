@@ -11,10 +11,20 @@ class Hexagon(AbstractPolygon):
     side_length: int
     pointy_top: bool = True
     side_length_offset: int = 0
-    
-    def get_vertices(self) -> list[Tuple[int,int]]:
+
+    def get_inner(self, offset_from_border: float) -> "Hexagon":
+        return Hexagon(
+            self.q,
+            self.r,
+            self.side_length - offset_from_border,
+            self.pointy_top,
+            0,
+        )
+
+    def get_vertices(self) -> list[Tuple[int, int]]:
         # Convert axial (q, r) to pixel (x, y)
-        x = self.side_length * (math.sqrt(3) * self.q + math.sqrt(3)/2 * self.r)
+        x = self.side_length * (math.sqrt(3) * self.q +
+                                math.sqrt(3)/2 * self.r)
         y = self.side_length * (3/2 * self.r)
 
         # Generate 6 corners

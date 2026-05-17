@@ -38,6 +38,8 @@ def main():
         doc.recompute()
     else:
         print("tableau creation failed")
+        
+    
 
 def create_resource(grid_type: GridType, height: int):
     shape = get_shape(grid_type, 0, 0, RESOURCE_UNIT_LENGTH)

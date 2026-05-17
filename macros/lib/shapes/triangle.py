@@ -16,6 +16,14 @@ class Triangle(AbstractPolygon):
     side_length: int
     side_length_offset: int = 0
 
+    def get_inner(self, offset_from_border: float) -> "Triangle":
+        return Triangle(
+            self.row,
+            self.col,
+            self.side_length - offset_from_border,
+            0
+        )
+
     def points_up(self) -> bool:
         return (self.row + self.col) % 2 == 0
 

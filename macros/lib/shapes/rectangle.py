@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import Tuple
 from lib.shapes.abstract_polygon import AbstractPolygon
 
+
 @dataclass
 class Rectangle(AbstractPolygon):
     corner_x: int
@@ -9,8 +10,17 @@ class Rectangle(AbstractPolygon):
     width: int
     height: int
     side_length_offset: int = 0
-    
-    def get_vertices(self) -> list[Tuple[int,int]]:
+
+    def get_inner(self, offset_from_border: float) -> "Rectangle":
+        return Rectangle(
+            self.corner_x + offset_from_border/2,
+            self.corner_y + offset_from_border/2,
+            self.width - offset_from_border/2,
+            self.height - offset_from_border/2,
+            0,
+        )
+
+    def get_vertices(self) -> list[Tuple[int, int]]:
         x = self.corner_x
         y = self.corner_y
         dx = self.width-self.side_length_offset

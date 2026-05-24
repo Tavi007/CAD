@@ -1,9 +1,10 @@
 from itertools import product
 from typing import Tuple
 
-from lib.grid.generator import get_shapes
+from lib.grid.generator import get_lattice_points
 from lib.grid.grid_type import GridType
 from lib.io.plotter import save_shapes
+from lib.shapes.circle import Circle
 from lib.shapes.shape_type import ShapeType
 
 SHAPE_TYPES: list[ShapeType] = [
@@ -16,18 +17,18 @@ SHAPE_TYPES: list[ShapeType] = [
 ]
 
 GRID_TYPES: list[GridType] = [
-    GridType.HEX,
-    GridType.SQUARE,
-    GridType.TRIANGLE,
+    GridType.ORTHOGONAL,
+    GridType.PACKED,
 ]
 
 SIZES: list[Tuple[float, float]] = [
     (125, 90),
-    (220, 150)
+    #    (220, 150),
+    #    (220, 220)
 ]
 
-UNIT_LENGTH = 10
-OFFSET_FROM_BORDER = 5
+UNIT_LENGTH = 10.0
+OFFSET_FROM_BORDER = 5.0
 
 
 def main():
@@ -36,8 +37,17 @@ def main():
             f"building {grid_type.value} grid for {board_shape_type.value} board of size {width}x{height}")
 
         board_shape = board_shape_type.get_board_shape(width, height)
-        inner_shape = board_shape.get_inner(OFFSET_FROM_BORDER)
-        shapes = get_shapes(grid_type, UNIT_LENGTH, inner_shape.is_inside)
+        inner_shape = board_shape.get_inner(OFFSET_FROM_BORDER + UNIT_LENGTH/2)
+        lattice_points = get_lattice_points(
+            grid_type,
+            UNIT_LENGTH,
+            inner_shape.is_inside,
+        )
+
+        shape_radius = UNIT_LENGTH/2 - 0.5
+        shapes = []
+        for point in lattice_points:
+            shapes.append(Circle(point[0], point[1], shape_radius))
 
         name = f"{board_shape_type.value}_board__{grid_type.value}_grid__{width}x{height}"
         if shapes:

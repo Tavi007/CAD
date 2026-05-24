@@ -1,20 +1,25 @@
 from enum import Enum
+from typing import Any
+import numpy.typing as npt
+import numpy as np
+from math import pi, sin, cos
 
-from lib.shapes.hexagon import Hexagon
-from lib.shapes.shape import Shape
-from lib.shapes.square import Square
-from lib.shapes.triangle import Triangle
+PI3 = pi / 3.0
 
 
 class GridType(Enum):
-    HEX = "hex"
-    SQUARE = "square"
-    TRIANGLE = "triangle"
+    ORTHOGONAL = "orthogonal"
+    PACKED = "packed"
 
-    def get_shape(self, i: int, j: int, unit_length: int) -> Shape:
-        if self == GridType.SQUARE:
-            return Square(i*unit_length, j*unit_length, unit_length, 1)
-        if self == GridType.HEX:
-            return Hexagon(i, j, unit_length/2, side_length_offset=0.5)
-        if self == GridType.TRIANGLE:
-            return Triangle(i, j, unit_length, side_length_offset=1)
+    def get_unit_vector(self) -> npt.NDArray[Any]:
+        if self == GridType.ORTHOGONAL:
+            return np.array([[1.0, 0.0], [0.0, 1.0]])
+        elif self == GridType.PACKED:
+            return np.array([[1.0, cos(PI3)], [0.0, sin(PI3)]])
+            return np.array([[1.0, 0.0], [0.5, 1.0]])
+
+
+GRID_TYPES: list[GridType] = [
+    GridType.ORTHOGONAL,
+    GridType.PACKED,
+]

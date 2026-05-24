@@ -1,5 +1,8 @@
 from abc import ABC, abstractmethod
+from typing import Any
+import numpy as np
 from shapely.geometry import Point, Polygon
+import numpy.typing as npt
 
 
 class Shape(ABC):
@@ -11,7 +14,7 @@ class Shape(ABC):
     def get_inner(self, offset_from_border: float) -> "Shape":
         pass
 
-    def is_inside(self, other: "Shape") -> bool:
-        self_shape = self.to_shapely()
-        other_shape = other.to_shapely()
-        return self_shape.contains(other_shape)
+    def is_inside(self, x: float, y: float) -> bool:
+        shapely_point = Point(x, y)
+        geometry = self.to_shapely()
+        return geometry.covers(shapely_point)

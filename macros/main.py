@@ -8,12 +8,12 @@ from lib.shapes.circle import Circle
 from lib.shapes.shape_type import ShapeType
 
 SHAPE_TYPES: list[ShapeType] = [
-    ShapeType.HEXAGON_POINTY,
-    ShapeType.HEXAGON_FLAT,
-    ShapeType.SQUARE,
-    ShapeType.RECTANGLE,
+    # ShapeType.HEXAGON_POINTY,
+    # ShapeType.HEXAGON_FLAT,
+    # ShapeType.SQUARE,
+    # ShapeType.RECTANGLE,
     ShapeType.TRIANGLE,
-    ShapeType.CIRCLE,
+    # ShapeType.CIRCLE,
 ]
 
 GRID_TYPES: list[GridType] = [
@@ -29,6 +29,7 @@ SIZES: list[Tuple[float, float]] = [
 
 UNIT_LENGTH = 10.0
 OFFSET_FROM_BORDER = 5.0
+GAP_SIZE = 2.0
 
 
 def main():
@@ -44,7 +45,7 @@ def main():
             inner_shape.is_inside,
         )
 
-        shape_radius = UNIT_LENGTH/2 - 0.5
+        shape_radius = (UNIT_LENGTH-GAP_SIZE)/2
         shapes = []
         for point in lattice_points:
             shapes.append(Circle(point[0], point[1], shape_radius))

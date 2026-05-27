@@ -30,8 +30,8 @@ class ShapeType(Enum):
         if self == ShapeType.RECTANGLE:
             return Rectangle(width, height)
         if self == ShapeType.TRIANGLE:
-            side_length = min(width, height*3/sqrt(3)/2)
-            return EquilateralTriangle(side_length, True)
+            height = min(width/(3/sqrt(3)/2), height)
+            return EquilateralTriangle(height, True)
         if self == ShapeType.CIRCLE:
             radius = min(width, height)/2
             return Circle(0.0, 0.0, radius)

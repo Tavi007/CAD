@@ -16,9 +16,6 @@ BASE_TRIANGLE_DOWN = np.array(
 class EquilateralTriangle(AbstractPolygon):
     height: int  # aka the scale
     points_up: bool
-    translation: npt.NDArray[np.float64] = field(
-        default_factory=lambda: np.array([0.0, 0.0], dtype=np.float64)
-    )
 
     def get_inner(self, offset_from_border: float) -> "EquilateralTriangle":
         new_height = self.height - 3*offset_from_border
@@ -28,13 +25,13 @@ class EquilateralTriangle(AbstractPolygon):
             )
 
         return EquilateralTriangle(
+            self.center,
             height=new_height,
             points_up=self.points_up,
-            translation=self.translation,
         )
 
-    def get_vertices(self) -> list[Tuple[int, int]]:
+    def get_base_vertices(self) -> list[Tuple[int, int]]:
         if self.points_up:
-            return BASE_TRIANGLE_UP*self.height + self.translation
+            return BASE_TRIANGLE_UP*self.height + self.center
         else:
-            return BASE_TRIANGLE_DOWN*self.height + self.translation
+            return BASE_TRIANGLE_DOWN*self.height + self.center

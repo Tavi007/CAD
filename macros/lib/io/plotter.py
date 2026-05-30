@@ -1,19 +1,26 @@
+from pathlib import Path
 from matplotlib.axes import Axes
 import matplotlib.pyplot as plt
 
 from lib.shapes.shape import Shape
 
-def save_shapes(shapes: list[Shape], board_shape: Shape, filename="output.png"):
+
+def save_shapes(shapes_dict: dict[str, list[Shape]], filename="output.png"):
+    path = Path(filename)
+    if not path.parent.exists():
+        path.parent.mkdir(parents=True)
+
     fig, ax = plt.subplots()
 
-    for shape in shapes:
-        draw_shape(shape, ax)
-    draw_shape(board_shape, ax, color="green")
-    
+    for color, shapes in shapes_dict.items():
+        for shape in shapes:
+            draw_shape(shape, ax, color=color)
+
     ax.set_aspect('equal')
     ax.autoscale()
     plt.savefig(filename)
     plt.close()
+
 
 def draw_shape(shape: Shape, ax: Axes, color="blue"):
     poly = shape.to_shapely()

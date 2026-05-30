@@ -10,11 +10,12 @@ class Rectangle(AbstractPolygon):
 
     def get_inner(self, offset_from_border: float) -> "Rectangle":
         return Rectangle(
+            self.center,
             self.width - offset_from_border*2,
             self.height - offset_from_border*2,
         )
 
-    def get_vertices(self) -> list[Tuple[int, int]]:
+    def get_base_vertices(self) -> list[Tuple[int, int]]:
         dx = self.width/2
         dy = self.height/2
 

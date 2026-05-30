@@ -1,11 +1,14 @@
 from abc import ABC, abstractmethod
-from typing import Any
-import numpy as np
+from dataclasses import dataclass, field
+from typing import Tuple
 from shapely.geometry import Point, Polygon
-import numpy.typing as npt
+import numpy as np
 
 
+@dataclass
 class Shape(ABC):
+    center: Tuple[float, float]
+
     @abstractmethod
     def to_shapely(self) -> Polygon | Point:
         pass
@@ -13,6 +16,9 @@ class Shape(ABC):
     @abstractmethod
     def get_inner(self, offset_from_border: float) -> "Shape":
         pass
+
+    def get_center(self):
+        return np.array([self.center[0], self.center[1]])
 
     def is_inside(self, x: float, y: float) -> bool:
         shapely_point = Point(x, y)

@@ -20,21 +20,21 @@ class ShapeType(Enum):
     def get_board_shape(self, width: float, height: float) -> Shape:
         if self == ShapeType.HEXAGON_POINTY:
             side_length = min(width, height)/2
-            return Hexagon(side_length)
+            return Hexagon((0.0, 0.0), side_length)
         if self == ShapeType.HEXAGON_FLAT:
             side_length = min(width, height)/2
-            return Hexagon(side_length, False)
+            return Hexagon((0.0, 0.0), side_length, False)
         if self == ShapeType.SQUARE:
             side_length = min(width, height)
-            return Square(side_length)
+            return Square((0.0, 0.0), side_length)
         if self == ShapeType.RECTANGLE:
-            return Rectangle(width, height)
+            return Rectangle((0.0, 0.0), width, height)
         if self == ShapeType.TRIANGLE:
             height = min(width/(3/sqrt(3)/2), height)
-            return EquilateralTriangle(height, True)
+            return EquilateralTriangle((0.0, 0.0), height, True)
         if self == ShapeType.CIRCLE:
             radius = min(width, height)/2
-            return Circle(0.0, 0.0, radius)
+            return Circle((0.0, 0.0), radius)
 
 
 SHAPE_TYPES: list[ShapeType] = [

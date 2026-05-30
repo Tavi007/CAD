@@ -5,11 +5,16 @@ from shapely import Polygon
 
 from lib.shapes.shape import Shape
 
+
 class AbstractPolygon(Shape):
     @abstractmethod
-    def get_vertices(self) -> list[Tuple[int,int]]:
+    def get_base_vertices(self) -> list[Tuple[int, int]]:
         pass
-    
-    
+
     def to_shapely(self) -> Polygon:
-        return Polygon(self.get_vertices())
+        vertices = self.get_base_vertices()
+        translated_vertices = []
+        translation = self.get_center()
+        for vert in vertices:
+            translated_vertices.append(translation + vert)
+        return Polygon(translated_vertices)

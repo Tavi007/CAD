@@ -10,5 +10,5 @@ from lib.shapes.shape import Shape
 class Polygon(AbstractPolygon):
     vertices: list[Tuple[int, int]]
 
-    def get_vertices(self) -> list[Tuple[int, int]]:
+    def get_base_vertices(self) -> list[Tuple[int, int]]:
         return self.vertices

@@ -11,11 +11,12 @@ class Hexagon(AbstractPolygon):
 
     def get_inner(self, offset_from_border: float) -> "Hexagon":
         return Hexagon(
+            self.center,
             self.side_length - offset_from_border,
             self.pointy_top,
         )
 
-    def get_vertices(self) -> list[Tuple[int, int]]:
+    def get_base_vertices(self) -> list[Tuple[int, int]]:
         corners = []
         for i in range(6):
             if self.pointy_top:

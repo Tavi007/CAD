@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Any
+from typing import Any, Tuple
 import numpy.typing as npt
 import numpy as np
 from math import pi, sin, cos
@@ -16,7 +16,15 @@ class GridType(Enum):
             return np.array([[1.0, 0.0], [0.0, 1.0]])
         elif self == GridType.PACKED:
             return np.array([[1.0, cos(PI3)], [0.0, sin(PI3)]])
-            return np.array([[1.0, 0.0], [0.5, 1.0]])
+
+    def in_symmetric_group(self, group, entry) -> bool:
+        if self == GridType.ORTHOGONAL:
+            return False
+        elif self == GridType.PACKED:
+            return False
+
+    def get_symmetric_image(self, entry: Tuple[int, int]) -> set[Tuple[int, int]]:
+        return set()
 
 
 GRID_TYPES: list[GridType] = [

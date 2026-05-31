@@ -57,14 +57,14 @@ def print_stencil():
         shape.is_inside,
     )
     stencil_shapes = []
-    for point in lattice_points:
+    for point, _ in lattice_points:
         stencil_shapes.append(
             Hexagon((point[0], point[1]), UNIT_LENGTH/SQRT3 + 0.01))
 
     power = list(powerset(lattice_points))
     for i, subset in enumerate(power):
         hole_shapes = []
-        for point in subset:
+        for point, (id_i, id_j) in subset:
             hole_shapes.append(
                 Hexagon((point[0], point[1]), UNIT_LENGTH/SQRT3-1))
         name = f"stencil/{shape_type.value}/{i}"
@@ -90,12 +90,11 @@ def print_all_boards():
 
         shape_radius = (UNIT_LENGTH-GAP_SIZE)/2
         shapes = []
-        for point in lattice_points:
+        for point, _ in lattice_points:
             shapes.append(Circle((point[0], point[1]), shape_radius))
 
         name = f"{board_shape_type.value}_board__{grid_type.value}_grid__{width}x{height}"
         if shapes:
-
             save_shapes({
                 "blue": shapes,
                 "green": [board_shape],

@@ -17,14 +17,30 @@ class GridType(Enum):
         elif self == GridType.PACKED:
             return np.array([[1.0, cos(PI3)], [0.0, sin(PI3)]])
 
-    def in_symmetric_group(self, group, entry) -> bool:
+    def get_symmetries(self, indices: list[Tuple[int, int]]) -> set[set[Tuple[int, int]]]:
         if self == GridType.ORTHOGONAL:
-            return False
-        elif self == GridType.PACKED:
-            return False
+            x, y = indices
+            return []
+        if self == GridType.PACKED:
+            symmetries = set()
+            for sym_fn in [
+                lambda x, y:  (x, y),
+                lambda x, y:  (x, -x-y),
+                lambda x, y:  (-x, -y),
+                lambda x, y:  (-x, x+y),
 
-    def get_symmetric_image(self, entry: Tuple[int, int]) -> set[Tuple[int, int]]:
-        return set()
+                lambda x, y:  (y, x),
+                lambda x, y:  (y, -x-y),
+                lambda x, y:  (-y, -x),
+                lambda x, y:  (-y, x+y),
+
+                lambda x, y:  (x+y, -x),
+                lambda x, y:  (x+y, -y),
+                lambda x, y:  (-x-y, x),
+                lambda x, y:  (-x-y, y),
+            ]:
+                symmetries.add(frozenset([sym_fn(x, y) for x, y in indices]))
+            return symmetries
 
 
 GRID_TYPES: list[GridType] = [

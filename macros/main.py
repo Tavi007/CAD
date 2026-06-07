@@ -1,8 +1,8 @@
-from itertools import product, chain, combinations
+from itertools import product
 import math
 from typing import Tuple
 
-from lib.grid.generator import get_lattice_points
+from lib.grid.generator import get_invariant_power_set, get_lattice_points
 from lib.grid.grid_type import GridType
 from lib.io.plotter import save_shapes
 from lib.shapes.circle import Circle
@@ -37,12 +37,6 @@ GAP_SIZE = 2.0
 SQRT3 = math.sqrt(3)
 
 
-def powerset(iterable):
-    "powerset([1,2,3]) --> () (1,) (2,) (3,) (1,2) (1,3) (2,3) (1,2,3)"
-    s = list(iterable)
-    return chain.from_iterable(combinations(s, r) for r in range(1, len(s)+1))
-
-
 def main():
     print_stencil()
     # print_all_boards()
@@ -50,26 +44,32 @@ def main():
 
 def print_stencil():
     shape_type = ShapeType.HEXAGON_FLAT
+    grid_type = GridType.PACKED
     shape = shape_type.get_board_shape(UNIT_LENGTH*3, UNIT_LENGTH*3)
     lattice_points = get_lattice_points(
-        GridType.PACKED,
+        grid_type,
         UNIT_LENGTH,
         shape.is_inside,
     )
-    stencil_shapes = []
-    for point, _ in lattice_points:
-        stencil_shapes.append(
-            Hexagon((point[0], point[1]), UNIT_LENGTH/SQRT3 + 0.01))
 
-    power = list(powerset(lattice_points))
+    # the base stencil shape consist of multiple smaller shapes merged together
+    stencil_base_shapes = []
+    for point, _ in lattice_points:
+        stencil_base_shapes.append(
+            Hexagon((point[0], point[1]), UNIT_LENGTH/SQRT3 + 0.01))
+    save_shapes({"blue": stencil_base_shapes}, f"output/base.png")
+
+    # for the holes, iterate over the power set.
+    # but only add symmetric and translative invariants
+    power = get_invariant_power_set(grid_type, lattice_points, 3, 5)
     for i, subset in enumerate(power):
         hole_shapes = []
-        for point, (id_i, id_j) in subset:
+        for coords in subset:
             hole_shapes.append(
-                Hexagon((point[0], point[1]), UNIT_LENGTH/SQRT3-1))
+                Hexagon((coords[0], coords[1]), UNIT_LENGTH/SQRT3-1))
         name = f"stencil/{shape_type.value}/{i}"
         save_shapes({
-            "blue": stencil_shapes,
+            "blue": stencil_base_shapes,
             "green": hole_shapes,
         },
             f"output/{name}.png")

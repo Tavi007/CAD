@@ -40,8 +40,8 @@ SQRT3 = math.sqrt(3)
 
 
 def main():
-    print_stencil()
-    # print_all_boards()
+    # print_stencil()
+    print_all_boards()
 
 
 def print_stencil():
@@ -108,16 +108,21 @@ def print_all_boards():
 
         shape_radius = (UNIT_LENGTH-GAP_SIZE)/2
         shapes = []
-        for point, _ in lattice_points:
+        indices = []
+        for point, index in lattice_points:
             shapes.append(Circle((point[0], point[1]), shape_radius))
+            indices.append(index)
 
-        name = f"{board_shape_type.value}_board__{grid_type.value}_grid__{width}x{height}"
+        path = Path(
+            f"output/board/{board_shape_type.value}/{grid_type.value}/{width}x{height}")
         if shapes:
             save_shapes({
                 "blue": shapes,
                 "green": [board_shape],
             },
-                f"output/{name}.png")
+                path.with_suffix(".png")
+            )
+            write_lattice_indices(path.with_suffix(".txt"), indices)
             print(" - saved")
         else:
             print(f" - no shapes found")

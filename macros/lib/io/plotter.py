@@ -6,9 +6,8 @@ from lib.shapes.shape import Shape
 
 
 def save_shapes(shapes_dict: dict[str, list[Shape]], filename: Path):
-    path = Path(filename)
-    if not path.parent.exists():
-        path.parent.mkdir(parents=True)
+    if not filename.parent.exists():
+        filename.parent.mkdir(parents=True)
 
     fig, ax = plt.subplots()
 

@@ -1,9 +1,11 @@
 from itertools import product
 import math
+from pathlib import Path
 from typing import Tuple
 
 from lib.grid.generator import get_invariant_power_set, get_lattice_points
 from lib.grid.grid_type import GridType
+from lib.io.lattice_points_io import write_lattice_indices
 from lib.io.plotter import save_shapes
 from lib.shapes.circle import Circle
 from lib.shapes.hexagon import Hexagon
@@ -43,36 +45,52 @@ def main():
 
 
 def print_stencil():
-    shape_type = ShapeType.HEXAGON_FLAT
-    grid_type = GridType.PACKED
-    shape = shape_type.get_board_shape(UNIT_LENGTH*3, UNIT_LENGTH*3)
+    stencil_shape = "triangle"
+
+    if stencil_shape == "hexagon":
+        shape_type = ShapeType.HEXAGON_FLAT
+        grid_type = GridType.PACKED
+        shape = shape_type.get_board_shape(UNIT_LENGTH*3, UNIT_LENGTH*3)
+    elif stencil_shape == "triangle":
+        shape_type = ShapeType.TRIANGLE
+        grid_type = GridType.PACKED
+        shape = shape_type.get_board_shape(UNIT_LENGTH*3, UNIT_LENGTH*3)
+        shape.translate(0.0, UNIT_LENGTH)
+
     lattice_points = get_lattice_points(
         grid_type,
         UNIT_LENGTH,
         shape.is_inside,
     )
+    path = Path(f"output/stencil/{stencil_shape}")
 
     # the base stencil shape consist of multiple smaller shapes merged together
     stencil_base_shapes = []
-    for point, _ in lattice_points:
+    stencil_base_indices = []
+    for point, index in lattice_points:
         stencil_base_shapes.append(
             Hexagon((point[0], point[1]), UNIT_LENGTH/SQRT3 + 0.01))
-    save_shapes({"blue": stencil_base_shapes}, f"output/base.png")
+        stencil_base_indices.append(index)
+    save_shapes({"blue": stencil_base_shapes}, path / f"base.png")
+    write_lattice_indices(path/"base.txt", stencil_base_indices)
 
     # for the holes, iterate over the power set.
     # but only add symmetric and translative invariants
-    power = get_invariant_power_set(grid_type, lattice_points, 3, 5)
-    for i, subset in enumerate(power):
+    coords_subsets, indices_subsets = get_invariant_power_set(
+        grid_type, lattice_points, 3, 5)
+    for i, (coords_subset, indices_subset) in enumerate(zip(coords_subsets, indices_subsets)):
         hole_shapes = []
-        for coords in subset:
+        for coords in coords_subset:
             hole_shapes.append(
                 Hexagon((coords[0], coords[1]), UNIT_LENGTH/SQRT3-1))
-        name = f"stencil/{shape_type.value}/{i}"
-        save_shapes({
-            "blue": stencil_base_shapes,
-            "green": hole_shapes,
-        },
-            f"output/{name}.png")
+        save_shapes(
+            {
+                "blue": stencil_base_shapes,
+                "green": hole_shapes,
+            },
+            path / f"{i}.png")
+
+        write_lattice_indices(path/f"{i}.txt", indices_subset)
 
 
 def print_all_boards():

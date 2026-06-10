@@ -20,6 +20,9 @@ class Shape(ABC):
     def get_center(self):
         return np.array([self.center[0], self.center[1]])
 
+    def translate(self, dx: float, dy: float):
+        self.center = (self.center[0] + dx, self.center[1] + dy)
+
     def is_inside(self, x: float, y: float) -> bool:
         shapely_point = Point(x, y)
         geometry = self.to_shapely()

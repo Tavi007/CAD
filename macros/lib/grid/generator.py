@@ -28,11 +28,12 @@ def get_invariant_power_set(
     points: list[Tuple[npt.NDArray[Any], Tuple[int, int]]],
     min_holes: int,
     max_holes: int,
-) -> set[list[Tuple[npt.NDArray[Any], Tuple[int, int]]]]:
+) -> tuple[list[list[Tuple[float, float]]], list[list[Tuple[int, int]]]]:
     invariant_coord_subsets = list()
+    invariant_index_subsets = list()
     all_subsets = list()
     for subset in _power_set(points):
-        if min_holes <= len(subset) <= max_holes:
+        if min_holes > len(subset) or len(subset) > max_holes:
             continue
 
         # unpack
@@ -53,8 +54,9 @@ def get_invariant_power_set(
 
         if not found:
             invariant_coord_subsets.append(coords)
+            invariant_index_subsets.append(indices)
             all_subsets.extend(symmetries)
-    return invariant_coord_subsets
+    return invariant_coord_subsets, invariant_index_subsets
 
 
 def _power_set(iterable):

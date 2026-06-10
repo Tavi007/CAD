@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from lib.shapes.shape import Shape
 
 
-def save_shapes(shapes_dict: dict[str, list[Shape]], filename="output.png"):
+def save_shapes(shapes_dict: dict[str, list[Shape]], filename: Path):
     path = Path(filename)
     if not path.parent.exists():
         path.parent.mkdir(parents=True)
@@ -18,7 +18,7 @@ def save_shapes(shapes_dict: dict[str, list[Shape]], filename="output.png"):
 
     ax.set_aspect('equal')
     ax.autoscale()
-    plt.savefig(filename)
+    plt.savefig(str(filename))
     plt.close()
 
 

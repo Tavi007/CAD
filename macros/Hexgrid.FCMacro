@@ -6,6 +6,7 @@ import math
 from pathlib import Path
 
 import numpy as np
+import re
 import Mesh
 import Part
 import FreeCAD as App
@@ -42,54 +43,58 @@ def main():
     print("=========== Start generating ===========")
     grid_type = GridType.PACKED
 
-    stencil_paths = Path(
-        f"C:/CAD/projects/macros/output/stencil/").rglob("*.txt")
-
-    board_path = [
-        Path(f"C:/CAD/projects/macros/output/unit_length_16.0/board/triangle/packed/150x150.txt")
-    ]
-
-    # path = Path("C:/CAD/projects/macros/output/test.txt")
-    for input in stencil_paths:
-        print(f"start tableau creation of {input}")
-        lattice_indices = read_lattice_indices(input)
-        name = f"{input.parent}_{input.name}"
-        tableau = create_tableau(grid_type, HEIGHT, lattice_indices)
-        if tableau:
-            doc = App.newDocument()
-            obj = doc.addObject("Part::Feature", name)
-            obj.Shape = tableau
-            doc.recompute()
-
-            Mesh.export(
-                [obj],
-                str(input.with_suffix(".stl"))
-            )
-            print(f" - tableau creation of {input} succeeded")
-        else:
-            print(f" - tableau creation of {input} failed")
+    stencil_dir = Path(f"C:/CAD/projects/macros/output/stencil/")
+    create_stencils(stencil_dir)
+    
+    
+    #board_path = Path(f"C:/CAD/projects/macros/output/unit_length_16.0/board/triangle/packed/150x150.txt")
+    # board_path = Path("C:/CAD/projects/macros/output/test.txt")
+    #create_board(board_path)
+    
             
-def create_stencil(input: Path, base_shape):
+def create_stencils(input_dir: Path):
+    print(f"start stencil creation of {input_dir}")
+    base_path = input_dir / "base.txt"
+    base_lattice_indices = read_lattice_indices(base_path)
+    
+    
+    for stencil_path in input_dir.rglob("*.txt"):
+        if not re.fullmatch(r"\d+\.txt", stencil_path.name):
+            continue
+            
+        print(f" - start stencil creation of {stencil_path}")
+        hole_lattice_indices = read_lattice_indices(stencil_path)
+        stencil = create_tableau(grid_type, base_lattice_indices, hole_lattice_indices)
+        
+        if stencil:
+            save(stencil, input)
+            print(f" - - stencil creation of {input} succeeded")
+        else:
+            print(f" - - stencil creation of {input} failed")
     
             
 def create_board(input: Path):
     print(f"start tableau creation of {input}")
     lattice_indices = read_lattice_indices(input)
-    name = f"{input.parent}_{input.name}"
-    tableau = create_tableau(grid_type, HEIGHT, lattice_indices)
+    tableau = create_tableau(grid_type, lattice_indices, lattice_indices)
     if tableau:
-        doc = App.newDocument()
-        obj = doc.addObject("Part::Feature", name)
-        obj.Shape = tableau
-        doc.recompute()
-
-        Mesh.export(
-            [obj],
-            str(input.with_suffix(".stl"))
-        )
+        save(tableau, input)
         print(f" - tableau creation of {input} succeeded")
     else:
         print(f" - tableau creation of {input} failed")
+        
+def save(shape, input: Path):
+    name = f"{input.parent}_{input.name}"
+    doc = App.newDocument()
+    obj = doc.addObject("Part::Feature", name)
+    obj.Shape = shape
+    doc.recompute()
+
+    Mesh.export(
+        [obj],
+        str(input.with_suffix(".stl"))
+    )
+    #doc.close()
 
 
 def read_lattice_indices(filename: Path) -> list[tuple[int, int]]:
@@ -103,23 +108,36 @@ def read_lattice_indices(filename: Path) -> list[tuple[int, int]]:
 
 def create_tableau(
     grid_type: GridType,
-    height: int,
-    lattice_indices: list[tuple[int, int]],
+    hex_lattice_indices: list[tuple[int, int]],
+    hole_lattice_indices: list[tuple[int, int]],
 ):
+    hex_shapes = []
+    for (i, j) in hex_lattice_indices:
+        hex = create_base_shape(ShapeType.HEXAGON_POINTY, UNIT_LENGTH*2/SQRT3, UNIT_LENGTH*2/SQRT3, HEIGHT)
+        center = get_center(grid_type, i, j)
+        hex.translate(center)
+        hex_shapes.append(hex)
+        
     holes = []
-    for (i, j) in lattice_indices:
-        holes.append(get_hole(grid_type, height, i, j))
+    for (i, j) in hole_lattice_indices:
+        hole = create_base_shape(ShapeType.CIRCLE, RESOURCE_SIZE+TOL, RESOURCE_SIZE+TOL, HEIGHT)
+        center = get_center(grid_type, i, j)
+        hole.translate(center)
+        holes.append(hole)
+   
 
     tableau = None
-    for hole in holes:
+    for hex in hex_shapes:
         if not tableau:
-            tableau = hole
+            tableau = hex
         else:
-            tableau = tableau.fuse(hole)
+            tableau = tableau.fuse(hex)
+    for hole in holes:
+        tableau = tableau.cut(hole)
     return tableau
 
 
-def create_shape(shape_type: ShapeType, width: int, depth: int, height: int):
+def create_base_shape(shape_type: ShapeType, width: int, depth: int, height: int):
     board_shape = shape_type.get_board_shape(width, depth)
     if shape_type == ShapeType.CIRCLE:
         return Part.makeCylinder(board_shape.radius, height)
@@ -133,33 +151,11 @@ def create_shape(shape_type: ShapeType, width: int, depth: int, height: int):
         face = Part.Face(wire)
         return face.extrude(App.Vector(0, 0, height)), board_shape.get_base_vertices()
         
-def get_shape(grid_type: GridType, height: float, i: int, j: int):
-    base, corner_vertices = create_shape(
-        ShapeType.HEXAGON_POINTY, UNIT_LENGTH*2/SQRT3, UNIT_LENGTH*2/SQRT3, height)
-
+def get_center(grid_type: GridType, i: int, j: int):
     unit_vector = grid_type.get_unit_vector()
     steps = np.array([i, j])
     center = UNIT_LENGTH * unit_vector @ steps
-    base.Placement.Base = App.Vector(center[0], center[1], 0)
-    return base
-    
-def get_hole(grid_type: GridType, height: float, i: int, j: int):
-    base, corner_vertices = create_shape(
-        ShapeType.HEXAGON_POINTY, UNIT_LENGTH*2/SQRT3, UNIT_LENGTH*2/SQRT3, height)
-    hole = create_shape(
-        ShapeType.CIRCLE, RESOURCE_SIZE+TOL, RESOURCE_SIZE+TOL, height)
-
-    unit_vector = grid_type.get_unit_vector()
-    steps = np.array([i, j])
-    center = UNIT_LENGTH * unit_vector @ steps
-    base.Placement.Base = App.Vector(center[0], center[1], 0)
-    hole.Placement.Base = App.Vector(center[0], center[1], 0)
-    base = base.cut(hole)
-
-    # for hole in get_side_holes(center, height):
-    #     base = base.cut(hole)
-
-    return base
+    return App.Vector(center[0], center[1], 0.0)
 
 
 def get_side_holes(center, height: float):

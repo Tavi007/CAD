@@ -5,7 +5,7 @@ from typing import Tuple
 
 from lib.grid.generator import get_invariant_power_set, get_lattice_points
 from lib.grid.grid_type import GridType
-from lib.io.lattice_points_io import write_lattice_indices
+from lib.io.lattice_points_io import read_lattice_indices, write_lattice_indices
 from lib.io.plotter import save_shapes
 from lib.shapes.circle import Circle
 from lib.shapes.hexagon import Hexagon
@@ -21,32 +21,43 @@ SHAPE_TYPES: list[ShapeType] = [
 ]
 
 GRID_TYPES: list[GridType] = [
-    GridType.ORTHOGONAL,
+    # GridType.ORTHOGONAL,
     GridType.PACKED,
 ]
 
 SIZES: list[Tuple[float, float]] = [
-    (125, 90),
-    #    (220, 150),
-    #    (220, 220)
+    # (125, 90),
+    (150, 150),
+    # (220, 220)
 ]
 
-UNIT_LENGTH = 10.0
-OFFSET_FROM_BORDER = 5.0
-GAP_SIZE = 2.0
+UNIT_LENGTH = 16.0
+OFFSET_FROM_BORDER = 0.0
+GAP_SIZE = 4.0
 
 
 SQRT3 = math.sqrt(3)
 
 
 def main():
-    # print_stencil()
+    # for stencil_shape in ["hexagon", "triangle"]:
+    #     print_stencil(stencil_shape)
     print_all_boards()
 
 
-def print_stencil():
-    stencil_shape = "triangle"
+def test_reader():
+    shape_type = ShapeType.TRIANGLE
+    grid_type = GridType.PACKED
+    width = 125
+    depth = 90
+    path = Path(
+        f"output/unit_length_{UNIT_LENGTH}/board/{shape_type.value}/{grid_type.value}/{width}x{depth}.txt")
+    # path = Path("output/test.txt")
+    height = 1.5
+    lattice_indices = read_lattice_indices(path)
 
+
+def print_stencil(stencil_shape: str):
     if stencil_shape == "hexagon":
         shape_type = ShapeType.HEXAGON_FLAT
         grid_type = GridType.PACKED
@@ -62,7 +73,7 @@ def print_stencil():
         UNIT_LENGTH,
         shape.is_inside,
     )
-    path = Path(f"output/stencil/{stencil_shape}")
+    path = Path(f"output/unit_length_{UNIT_LENGTH}/stencil/{stencil_shape}")
 
     # the base stencil shape consist of multiple smaller shapes merged together
     stencil_base_shapes = []
@@ -114,7 +125,7 @@ def print_all_boards():
             indices.append(index)
 
         path = Path(
-            f"output/board/{board_shape_type.value}/{grid_type.value}/{width}x{height}")
+            f"output/unit_length_{UNIT_LENGTH}/board/{board_shape_type.value}/{grid_type.value}/{width}x{height}")
         if shapes:
             save_shapes({
                 "blue": shapes,

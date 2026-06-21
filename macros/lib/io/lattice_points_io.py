@@ -11,7 +11,7 @@ def write_lattice_indices(filename: Path, lattice_points: list[tuple[int, int]])
 
 def read_lattice_indices(filename: Path) -> list[tuple[int, int]]:
     lattice_points = []
-    with open(filename, "r") as f:
+    with open(str(filename), "r") as f:
         for line in f:
             x_str, y_str = line.strip().split(",")
             lattice_points.append((int(x_str), int(y_str)))

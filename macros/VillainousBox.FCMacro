@@ -1,0 +1,97 @@
+import FreeCAD as App
+import Part
+from math import sqrt, pi
+
+# measurements (in mm)
+WALL_THICKNESS = 1.5
+BOTTOM_THICKNESS = 1.0
+TABLEAU_DEPTH = 220.0
+TABLEAU_WIDTH = 110.0
+
+
+BOX_HEIGHT = 20.0
+BOX_DEPTH = TABLEAU_DEPTH + 2 * WALL_THICKNESS
+BOX_WIDTH = TABLEAU_WIDTH + 2 * WALL_THICKNESS
+
+
+CARD_BOX_HEIGHT = BOX_HEIGHT 
+CARD_BOX_WIDTH = BOX_WIDTH - 4 * WALL_THICKNESS
+CARD_BOX_DEPTH = (BOX_DEPTH/3) - 2 * WALL_THICKNESS
+
+
+
+# =====================
+# MAIN
+# =====================
+
+def main():
+    shape = create_character_box()
+    if not shape:
+        print("Shape won't fit in the print volume!")
+        return
+
+    doc = App.ActiveDocument
+    if doc is None:
+        doc = App.newDocument("CharacterBox")
+
+    obj = doc.addObject("Part::Feature", "CharacterBox")
+    obj.Shape = shape
+    doc.recompute()
+    
+    
+
+# =====================
+# CHARACTER BOX
+# =====================
+
+def create_character_box():
+    # create box
+    box = Part.makeBox(BOX_WIDTH, BOX_DEPTH, BOX_HEIGHT)
+    box = box.makeFillet(WALL_THICKNESS, box.Edges)
+
+    # cut card trays
+    card_tray_negative = create_card_tray_negative()
+    box = box.cut(card_tray_negative)
+
+    # cut slit for tableau
+    
+    
+
+    return box
+    
+# =====================
+# TRAY NEGATIVE
+# =====================
+
+def create_card_tray_negative():
+    base = Part.makeBox(BOX_WIDTH/2, BOX_DEPTH/2, BOX_HEIGHT)
+    base = base.translate(App.Vector(BOX_WIDTH/4, BOX_DEPTH/4, 0))
+    
+    d_width = WALL_THICKNESS*2
+    d_height = BOTTOM_THICKNESS
+    for i in range(3):
+        d_depth = WALL_THICKNESS*2 + (WALL_THICKNESS + CARD_BOX_DEPTH)*i
+        
+        card_box = Part.makeBox(CARD_BOX_WIDTH, CARD_BOX_DEPTH, CARD_BOX_HEIGHT)
+        card_box = card_box.translate(App.Vector(d_width, d_depth, d_height))
+        
+        base = base.fuse(card_box)
+    
+    return base
+    
+# =====================
+# LID NEGATIVE
+# =====================
+
+def create_lid_negative():
+    base = Part.makeBox(CARD_BOX_WIDTH/2, CARD_BOX_DEPTH*2, BOX_HEIGHT)
+    base = base.translate(App.Vector(CARD_BOX_WIDTH/4, CARD_BOX_DEPTH/2, 0))
+    
+    return base
+
+
+# =====================
+# ENTRY POINT
+# =====================
+if __name__ == "__main__":
+    main()

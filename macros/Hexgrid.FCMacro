@@ -30,7 +30,7 @@ importlib.reload(lib.io)
 
 
 GAP_SIZE = 3.0
-RESOURCE_SIZE = 16.0
+RESOURCE_SIZE = 15.0
 UNIT_LENGTH = GAP_SIZE + RESOURCE_SIZE
 TOL = 0.3
 SIDE_HOLE_HEIGHT = 0.1
@@ -42,17 +42,21 @@ HEIGHT = 2.3
 def main():
     print("=========== Start generating ===========")
     grid_type = GridType.PACKED
+    base_path = Path(f"C:/CAD/projects/macros/output/unit_length_{RESOURCE_SIZE}")
 
-    #stencil_dir = Path(f"C:/CAD/projects/macros/output/stencil/hexagon/")
-    # create_stencils(stencil_dir)
+    #stencil_dir = Path(f"C:/CAD/projects/macros/output/stencil/triangle_3/")
+    #output_dir = base_path / Path(f"stencil/packed/triangle_3")
+    #create_stencils(stencil_dir, output_dir)
 
-    board_path = Path(
-        f"C:/CAD/projects/macros/output/unit_length_{RESOURCE_SIZE}/board/triangle/packed/150x150.txt")
-    # board_path = Path("C:/CAD/projects/macros/output/test.txt")
+    #board_path = base_path / Path(f"board/triangle/packed/150x150.txt")
+    board_path = Path(f"C:/CAD/projects/macros/output/board/half_star.txt")
     create_board(board_path)
+    
+    #resource_path = base_path / Path(f"resource.stl")
+    #create_resource(resource_path)
 
 
-def create_stencils(input_dir: Path):
+def create_stencils(input_dir: Path, output_dir: Path):
     print(f"start stencil creation of {input_dir}")
     base_path = input_dir / "base.txt"
     base_lattice_indices = read_lattice_indices(base_path)
@@ -64,10 +68,15 @@ def create_stencils(input_dir: Path):
         print(f" - start stencil creation of {stencil_path}")
         hole_lattice_indices = read_lattice_indices(stencil_path)
         stencil = create_shape_with_holes(
-            GridType.PACKED, base_lattice_indices, hole_lattice_indices)
+            GridType.PACKED, 
+            base_lattice_indices, 
+            hole_lattice_indices,
+            RESOURCE_SIZE - 4 #just a bit smaller so resources won't fit in anymore
+            )
 
+        output_path = output_dir / stencil_path.name
         if stencil:
-            save(stencil, stencil_path)
+            save(stencil, output_path)
             print(f" - - stencil creation of {input} succeeded")
         else:
             print(f" - - stencil creation of {input} failed")
@@ -77,15 +86,34 @@ def create_board(input: Path):
     print(f"start tableau creation of {input}")
     lattice_indices = read_lattice_indices(input)
     tableau = create_shape_with_holes(
-        GridType.PACKED, lattice_indices, lattice_indices)
+        GridType.PACKED,
+        lattice_indices,
+        lattice_indices,
+        RESOURCE_SIZE+TOL
+    )
     if tableau:
         save(tableau, input)
         print(f" - tableau creation of {input} succeeded")
     else:
         print(f" - tableau creation of {input} failed")
+        
+def create_resource(output: Path):
+    hole = create_base_shape(
+        ShapeType.CIRCLE, 
+        RESOURCE_SIZE, 
+        RESOURCE_SIZE, 
+        HEIGHT-TOL
+    )
+    if hole:
+        save(hole, output)
+        print(f" - resource creation of {output} succeeded")
+    else:
+        print(f" - resource creation of {output} failed")
+    
 
 
 def save(shape, input: Path):
+    input.parent.mkdir(parents=True, exist_ok=True)
     name = f"{input.parent}_{input.name}"
     doc = App.newDocument()
     obj = doc.addObject("Part::Feature", name)
@@ -112,6 +140,7 @@ def create_shape_with_holes(
     grid_type: GridType,
     hex_lattice_indices: list[tuple[int, int]],
     hole_lattice_indices: list[tuple[int, int]],
+    hole_size: float
 ):
     hex_shapes = []
     for (i, j) in hex_lattice_indices:
@@ -124,7 +153,11 @@ def create_shape_with_holes(
     holes = []
     for (i, j) in hole_lattice_indices:
         hole = create_base_shape(
-            ShapeType.CIRCLE, RESOURCE_SIZE+TOL, RESOURCE_SIZE+TOL, HEIGHT)
+            ShapeType.CIRCLE, 
+            hole_size, 
+            hole_size, 
+            HEIGHT
+        )
         center = get_center(grid_type, i, j)
         hole.translate(center)
         holes.append(hole)
@@ -137,7 +170,8 @@ def create_shape_with_holes(
             tableau = tableau.fuse(hex)
     for hole in holes:
         tableau = tableau.cut(hole)
-    return tableau
+        
+    return shave_edges(tableau, grid_type, hex_lattice_indices)
 
 
 def create_base_shape(shape_type: ShapeType, width: int, depth: int, height: int):
@@ -161,33 +195,32 @@ def get_center(grid_type: GridType, i: int, j: int):
     center = UNIT_LENGTH * unit_vector @ steps
     return App.Vector(center[0], center[1], 0.0)
 
+    
+def shave_edges(shape,
+                grid_type: GridType,
+                shape_lattice_indices: list[tuple[int, int]]):
+    # Find min/max lattice indices in both directions
+    imin = min(i for i, _ in shape_lattice_indices)
+    imax = max(i for i, _ in shape_lattice_indices)
+    jmin = min(j for _, j in shape_lattice_indices)
+    jmax = max(j for _, j in shape_lattice_indices)
 
-def get_side_holes(center, height: float):
-    apothem = UNIT_LENGTH * math.sqrt(3) / 2
+    for i in range(imin, imax + 1):
+        for j in range(jmin, jmax + 1):
+            if (i, j) not in shape_lattice_indices:
+                hole = create_base_shape(
+                    ShapeType.HEXAGON_POINTY,
+                    UNIT_LENGTH + TOL,
+                    UNIT_LENGTH + TOL,
+                    HEIGHT,
+                )
 
-    holes = []
-    for k in range(6):
-        angle = math.radians(60 * k + 30)
+                center = get_center(grid_type, i, j)
+                hole.translate(center)
+                shape = shape.cut(hole)
 
-        nx = math.cos(angle)
-        ny = math.sin(angle)
-
-        mx = apothem * nx
-        my = apothem * ny
-
-        hole = Part.makeBox(SIDE_HOLE_WIDTH, UNIT_LENGTH*2, SIDE_HOLE_HEIGHT)
-        translation = App.Vector(
-            center[0] - SIDE_HOLE_WIDTH/2 - SIDE_HOLE_WIDTH*nx/2,
-            center[1] - SIDE_HOLE_WIDTH*ny/2,
-            (height - SIDE_HOLE_HEIGHT) / 2
-        )
-        rot = App.Rotation(
-            App.Vector(1, 0, 0),
-            App.Vector(nx, ny, 0)
-        )
-        hole.Placement = App.Placement(translation, rot)
-        holes.append(hole)
-    return holes
+    return shape
+    
 
 
 if __name__ == "__main__":

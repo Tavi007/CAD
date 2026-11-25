@@ -1,0 +1,642 @@
+
+import FreeCAD as App
+import FreeCADGui as Gui
+import Part
+import math
+
+
+# =============================================================
+# RoundedBox
+# =============================================================
+
+class RoundedBox:
+    """
+    A box defined by length (X), width (Y), and height (Z).
+
+    The edge radii describe:
+        top_radius    - edges at the top Z plane
+        side_radius   - edges along the sides / intermediate edges
+        bottom_radius - edges at the bottom Z plane
+
+    The class can create a raw box or a rounded box.
+    """
+
+    def __init__(
+        self,
+        length,
+        width,
+        height,
+        top_radius=0.0,
+        side_radius=0.0,
+        bottom_radius=0.0,
+        origin=None,
+        name="RoundedBox",
+    ):
+        self.length = float(length)
+        self.width = float(width)
+        self.height = float(height)
+
+        self.top_radius = float(top_radius)
+        self.side_radius = float(side_radius)
+        self.bottom_radius = float(bottom_radius)
+
+        self.origin = origin or App.Vector(0, 0, 0)
+        self.name = name
+
+        self._validate()
+
+    def _validate(self):
+        for key in ("length", "width", "height"):
+            value = getattr(self, key)
+            if not math.isfinite(value) or value <= 0:
+                raise ValueError(key + " must be positive and finite.")
+
+        for key in ("top_radius", "side_radius", "bottom_radius"):
+            value = getattr(self, key)
+            if not math.isfinite(value) or value < 0:
+                raise ValueError(key + " must be non-negative and finite.")
+
+    def create_raw(self):
+        """Create the unrounded Part box."""
+        return Part.makeBox(
+            self.length,
+            self.width,
+            self.height,
+            self.origin,
+        )
+
+    def radius_for_edge(self, edge, top_z=None, bottom_z=None):
+        """
+        Determine the radius for an original, unfilleted edge.
+
+        This is a geometric classification, not a semantic edge
+        label. Edges lying in the top or bottom planes receive
+        those radii; all others receive the side radius.
+        """
+        scale = max(
+            1.0, self.length, self.width, self.height
+        )
+        tol = scale * 1e-7
+
+        if top_z is None:
+            top_z = self.origin.z + self.height
+        if bottom_z is None:
+            bottom_z = self.origin.z
+
+        bb = edge.BoundBox
+
+        if (
+            abs(bb.ZMin - top_z) < tol
+            and abs(bb.ZMax - top_z) < tol
+        ):
+            return self.top_radius
+
+        if (
+            abs(bb.ZMin - bottom_z) < tol
+            and abs(bb.ZMax - bottom_z) < tol
+        ):
+            return self.bottom_radius
+
+        return self.side_radius
+
+    def create_rounded(self):
+        """
+        Create a rounded standalone box.
+
+        For mixed radii, the edges are processed in descending
+        radius order. Failed fillets are reported.
+        """
+        shape = self.create_raw()
+        top_z = self.origin.z + self.height
+        bottom_z = self.origin.z
+
+        # Capture original edge bounding boxes and their radii.
+        edge_specs = []
+        for edge in shape.Edges:
+            edge_specs.append((
+                edge.BoundBox,
+                self.radius_for_edge(edge, top_z, bottom_z),
+            ))
+
+        edge_specs.sort(key=lambda item: item[1], reverse=True)
+
+        for bb0, radius in edge_specs:
+            if radius <= 0:
+                continue
+
+            # Find a current edge matching the original bounds.
+            target = None
+            for edge in shape.Edges:
+                bb = edge.BoundBox
+                if (
+                    abs(bb.XMin - bb0.XMin) < 1e-7
+                    and abs(bb.XMax - bb0.XMax) < 1e-7
+                    and abs(bb.YMin - bb0.YMin) < 1e-7
+                    and abs(bb.YMax - bb0.YMax) < 1e-7
+                    and abs(bb.ZMin - bb0.ZMin) < 1e-7
+                    and abs(bb.ZMax - bb0.ZMax) < 1e-7
+                ):
+                    target = edge
+                    break
+
+            if target is None:
+                continue
+
+            try:
+                result = shape.makeFillet(radius, [target])
+                if result.isValid() and not result.isNull():
+                    shape = result
+            except Exception as exc:
+                App.Console.PrintWarning(
+                    self.name + ": fillet failed (radius "
+                    + str(radius) + "): " + str(exc) + "\n"
+                )
+
+        return shape
+
+
+# =============================================================
+# FingerAccess
+# =============================================================
+
+class FingerAccess:
+    """
+    Rounded-rectangle finger opening cut through the front wall.
+
+    width  - opening size along X
+    height - opening size along Z
+    radius - radius of the four profile corners
+
+    The opening is centered horizontally on the tray front.
+    Its bottom is aligned with the cavity floor.
+    """
+
+    def __init__(
+        self,
+        width,
+        height,
+        radius=0.0,
+        name="FingerAccess",
+    ):
+        self.width = float(width)
+        self.height = float(height)
+        self.radius = float(radius)
+        self.name = name
+
+        for key in ("width", "height", "radius"):
+            value = getattr(self, key)
+            if not math.isfinite(value) or value < 0:
+                raise ValueError(
+                    key + " must be non-negative and finite."
+                )
+
+        if (self.width == 0) != (self.height == 0):
+            raise ValueError(
+                "Access width and height must both be zero "
+                "or both be greater than zero."
+            )
+
+    def create_cutter(
+        self,
+        x_center,
+        floor_z,
+        front_y,
+        cut_depth,
+    ):
+        """Create the solid used to cut the access opening."""
+        if self.width == 0 or self.height == 0:
+            return None
+
+        r = min(
+            self.radius,
+            self.width / 2.0,
+            self.height / 2.0,
+        )
+
+        if r < self.radius:
+            App.Console.PrintWarning(
+                "FingerAccess: corner radius reduced to fit.\n"
+            )
+
+        x0 = x_center - self.width / 2.0
+        x1 = x_center + self.width / 2.0
+        z0 = floor_z
+        z1 = floor_z + self.height
+
+        # Extend the cutter beyond both faces of the front wall.
+        y0 = front_y - 1.0
+        depth = cut_depth + 2.0
+
+        def p(x, z):
+            return App.Vector(x, y0, z)
+
+        if r == 0:
+            return Part.makeBox(
+                self.width,
+                depth,
+                self.height,
+                App.Vector(x0, y0, z0),
+            )
+
+        # Rounded rectangle made from four lines and four arcs.
+        # The profile lies in the XZ plane.
+        q = r / math.sqrt(2.0)
+
+        edges = [
+            Part.makeLine(p(x0 + r, z0), p(x1 - r, z0)),
+
+            Part.Arc(
+                p(x1 - r, z0),
+                p(x1 - r + q, z0 + r - q),
+                p(x1, z0 + r),
+            ).toShape(),
+
+            Part.makeLine(p(x1, z0 + r), p(x1, z1 - r)),
+
+            Part.Arc(
+                p(x1, z1 - r),
+                p(x1 - r + q, z1 - r + q),
+                p(x1 - r, z1),
+            ).toShape(),
+
+            Part.makeLine(p(x1 - r, z1), p(x0 + r, z1)),
+
+            Part.Arc(
+                p(x0 + r, z1),
+                p(x0 + r - q, z1 - r + q),
+                p(x0, z1 - r),
+            ).toShape(),
+
+            Part.makeLine(p(x0, z1 - r), p(x0, z0 + r)),
+
+            Part.Arc(
+                p(x0, z0 + r),
+                p(x0 + r - q, z0 + r - q),
+                p(x0 + r, z0),
+            ).toShape(),
+        ]
+
+        wire = Part.Wire(edges)
+        face = Part.Face(wire)
+
+        return face.extrude(App.Vector(0, depth, 0))
+
+
+# =============================================================
+# RoundedTray
+# =============================================================
+
+class RoundedTray:
+    """
+    Builds a tray by:
+        1. Repairing outer dimensions.
+        2. Creating an unrounded outer box.
+        3. Cutting an unrounded inner cavity.
+        4. Cutting optional finger access.
+        5. Rounding the resulting edges.
+        6. Adding the final solid to the document.
+
+    The supplied inner dimensions describe the clear cavity.
+    """
+
+    def __init__(
+        self,
+        height,
+        width,
+        length,
+        top_edge_radius=0.0,
+        side_edge_radius=0.0,
+        bottom_edge_radius=0.0,
+        outer_height=None,
+        outer_width=None,
+        outer_length=None,
+        access=None,
+        wall_thickness=2.0,
+        floor_thickness=2.0,
+        name="RoundedTray",
+    ):
+        self.height = float(height)
+        self.width = float(width)
+        self.length = float(length)
+
+        self.top_edge_radius = float(top_edge_radius)
+        self.side_edge_radius = float(side_edge_radius)
+        self.bottom_edge_radius = float(bottom_edge_radius)
+
+        self.outer_height = outer_height
+        self.outer_width = outer_width
+        self.outer_length = outer_length
+
+        self.wall_thickness = float(wall_thickness)
+        self.floor_thickness = float(floor_thickness)
+
+        self.access = access or FingerAccess(0, 0)
+        self.name = name
+
+        self._validate()
+
+    def _validate(self):
+        for key in (
+            "height", "width", "length",
+            "wall_thickness", "floor_thickness",
+        ):
+            value = getattr(self, key)
+            if not math.isfinite(value) or value <= 0:
+                raise ValueError(
+                    key + " must be positive and finite."
+                )
+
+        for key in (
+            "top_edge_radius",
+            "side_edge_radius",
+            "bottom_edge_radius",
+        ):
+            value = getattr(self, key)
+            if not math.isfinite(value) or value < 0:
+                raise ValueError(
+                    key + " must be non-negative and finite."
+                )
+
+    @staticmethod
+    def _repair_dimension(value, minimum, name):
+        if value is None:
+            return minimum
+
+        value = float(value)
+        if not math.isfinite(value):
+            raise ValueError(name + " must be finite.")
+
+        if value < minimum:
+            App.Console.PrintWarning(
+                name + " repaired from "
+                + str(value) + " to " + str(minimum) + "\n"
+            )
+            return minimum
+
+        return value
+
+    def repair_outer_dimensions(self):
+        """Calculate or repair the outer dimensions."""
+        self.outer_length = self._repair_dimension(
+            self.outer_length,
+            self.length + 2 * self.wall_thickness,
+            "outer_length",
+        )
+
+        self.outer_width = self._repair_dimension(
+            self.outer_width,
+            self.width + 2 * self.wall_thickness,
+            "outer_width",
+        )
+
+        self.outer_height = self._repair_dimension(
+            self.outer_height,
+            self.height + self.floor_thickness,
+            "outer_height",
+        )
+
+    def create_outer_box(self):
+        """Create the raw outer box."""
+        return RoundedBox(
+            self.outer_length,
+            self.outer_width,
+            self.outer_height,
+            self.top_edge_radius,
+            self.side_edge_radius,
+            self.bottom_edge_radius,
+            name=self.name + "_Outer",
+        ).create_raw()
+
+    def create_inner_cutter(self):
+        """Create the unrounded cavity cutter."""
+        x = (self.outer_length - self.length) / 2.0
+        y = (self.outer_width - self.width) / 2.0
+        z = self.floor_thickness
+
+        # Extend above the outer top to guarantee an open tray.
+        return Part.makeBox(
+            self.length,
+            self.width,
+            self.outer_height - z + 1.0,
+            App.Vector(x, y, z),
+        )
+
+    def cut_finger_access(self, shape):
+        """Subtract the finger access, if enabled."""
+        if self.access.width == 0:
+            return shape
+
+        if self.access.width > self.length:
+            raise ValueError(
+                "Finger access width exceeds the cavity length."
+            )
+
+        if self.access.height > self.height:
+            raise ValueError(
+                "Finger access height exceeds the cavity height."
+            )
+
+        cavity_x = (self.outer_length - self.length) / 2.0
+        cavity_y = (self.outer_width - self.width) / 2.0
+
+        cutter = self.access.create_cutter(
+            x_center=cavity_x + self.length / 2.0,
+            floor_z=self.floor_thickness,
+            front_y=cavity_y,
+            cut_depth=self.wall_thickness,
+        )
+
+        if cutter is not None:
+            shape = shape.cut(cutter)
+
+        return shape
+
+    def round_tray_edges(self, shape):
+        """
+        Apply the requested radii to the cut tray.
+
+        Edges are classified using the original tray's top and
+        bottom planes. Zero-radius edges remain sharp.
+
+        Each fillet is attempted independently so one impossible
+        edge does not necessarily prevent all other fillets.
+        """
+        top_z = self.outer_height
+        bottom_z = 0.0
+
+        scale = max(
+            1.0,
+            self.outer_length,
+            self.outer_width,
+            self.outer_height,
+        )
+        tol = scale * 1e-7
+
+        def classify(edge):
+            bb = edge.BoundBox
+
+            if (
+                abs(bb.ZMin - top_z) < tol
+                and abs(bb.ZMax - top_z) < tol
+            ):
+                return self.top_edge_radius
+
+            if (
+                abs(bb.ZMin - bottom_z) < tol
+                and abs(bb.ZMax - bottom_z) < tol
+            ):
+                return self.bottom_edge_radius
+
+            return self.side_edge_radius
+
+        # Save the edge bounds before any topology changes.
+        specs = [
+            (edge.BoundBox, classify(edge))
+            for edge in shape.Edges
+        ]
+
+        # Larger fillets first; skip all zero-radius edges.
+        specs = sorted(
+            [spec for spec in specs if spec[1] > 0],
+            key=lambda spec: spec[1],
+            reverse=True,
+        )
+
+        for original_bb, radius in specs:
+            target = None
+
+            # Re-find an edge in the current shape by its bounds.
+            for edge in shape.Edges:
+                bb = edge.BoundBox
+
+                if (
+                    abs(bb.XMin - original_bb.XMin) < tol
+                    and abs(bb.XMax - original_bb.XMax) < tol
+                    and abs(bb.YMin - original_bb.YMin) < tol
+                    and abs(bb.YMax - original_bb.YMax) < tol
+                    and abs(bb.ZMin - original_bb.ZMin) < tol
+                    and abs(bb.ZMax - original_bb.ZMax) < tol
+                ):
+                    target = edge
+                    break
+
+            if target is None:
+                continue
+
+            try:
+                result = shape.makeFillet(radius, [target])
+
+                if (
+                    not result.isNull()
+                    and result.isValid()
+                    and result.Volume > 0
+                ):
+                    shape = result
+                else:
+                    App.Console.PrintWarning(
+                        "Invalid fillet result; radius "
+                        + str(radius) + " skipped.\n"
+                    )
+
+            except Exception as exc:
+                App.Console.PrintWarning(
+                    "Fillet failed; radius "
+                    + str(radius) + " skipped: "
+                    + str(exc) + "\n"
+                )
+
+        return shape
+
+    def build_shape(self):
+        """Build and return the finished tray shape."""
+        self.repair_outer_dimensions()
+
+        outer = self.create_outer_box()
+        cavity = self.create_inner_cutter()
+
+        # Boolean operations happen before rounding.
+        tray = outer.cut(cavity)
+        #tray = self.cut_finger_access(tray)
+        tray = tray.removeSplitter()
+
+        if tray.isNull() or not tray.isValid():
+            raise RuntimeError(
+                "Tray is invalid after Boolean operations."
+            )
+
+        tray = self.round_tray_edges(tray)
+        tray = tray.removeSplitter()
+
+        if tray.isNull() or not tray.isValid():
+            raise RuntimeError(
+                "Tray is invalid after edge rounding."
+            )
+
+        return tray
+
+    def create(self, document=None):
+        """Create the tray as a FreeCAD document object."""
+        if document is None:
+            document = App.ActiveDocument
+
+        if document is None:
+            document = App.newDocument("TrayDocument")
+
+        shape = self.build_shape()
+
+        old = document.getObject(self.name)
+        if old is not None:
+            document.removeObject(self.name)
+
+        obj = document.addObject(
+            "PartDesign::Feature",
+            self.name,
+        )
+        obj.Label = self.name
+        obj.Shape = shape
+
+        document.recompute()
+
+        try:
+            Gui.activeDocument().activeView().viewAxonometric()
+            Gui.activeDocument().activeView().fitAll()
+        except Exception:
+            pass
+
+        return obj
+
+
+# =============================================================
+# Example usage
+# =============================================================
+
+if __name__ == "__main__":
+
+    finger_access = FingerAccess(
+        width=30,
+        height=12,
+        radius=4,
+    )
+
+    tray = RoundedTray(
+        height=49,
+        width=70,
+        length=70,
+
+        top_edge_radius=0.4,
+        side_edge_radius=2,
+        bottom_edge_radius=1,
+
+        # None means calculate the minimum valid outer size.
+        outer_height=None,
+        outer_width=None,
+        outer_length=None,
+
+        wall_thickness=3,
+        floor_thickness=3,
+
+        access=finger_access,
+        name="RoundedTray",
+    )
+
+    tray_object = tray.create()

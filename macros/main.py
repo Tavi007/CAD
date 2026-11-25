@@ -3,6 +3,8 @@ import math
 from pathlib import Path
 from typing import Tuple
 
+import numpy as np
+
 from lib.grid.generator import get_invariant_power_set, get_lattice_points
 from lib.grid.grid_type import GridType
 from lib.io.lattice_points_io import read_lattice_indices, write_lattice_indices
@@ -31,7 +33,7 @@ SIZES: list[Tuple[float, float]] = [
     # (220, 220)
 ]
 
-UNIT_LENGTH = 16.0
+UNIT_LENGTH = 18.0
 OFFSET_FROM_BORDER = 0.0
 GAP_SIZE = 4.0
 
@@ -40,9 +42,10 @@ SQRT3 = math.sqrt(3)
 
 
 def main():
-    # for stencil_shape in ["hexagon", "triangle"]:
-    #     print_stencil(stencil_shape)
-    print_all_boards()
+    # print_base_stencil("triangle_4")
+    for stencil_shape in ["star"]:
+        print_stencil_variants(stencil_shape)
+   # print_all_boards()
 
 
 def test_reader():
@@ -57,15 +60,21 @@ def test_reader():
     lattice_indices = read_lattice_indices(path)
 
 
-def print_stencil(stencil_shape: str):
+def print_base_stencil(stencil_shape: str):
+
     if stencil_shape == "hexagon":
         shape_type = ShapeType.HEXAGON_FLAT
         grid_type = GridType.PACKED
         shape = shape_type.get_board_shape(UNIT_LENGTH*3, UNIT_LENGTH*3)
-    elif stencil_shape == "triangle":
+    elif stencil_shape == "triangle_3":
         shape_type = ShapeType.TRIANGLE
         grid_type = GridType.PACKED
         shape = shape_type.get_board_shape(UNIT_LENGTH*3, UNIT_LENGTH*3)
+        shape.translate(0.0, UNIT_LENGTH)
+    elif stencil_shape == "triangle_4":
+        shape_type = ShapeType.TRIANGLE
+        grid_type = GridType.PACKED
+        shape = shape_type.get_board_shape(UNIT_LENGTH*4.5, UNIT_LENGTH*4.5)
         shape.translate(0.0, UNIT_LENGTH)
 
     lattice_points = get_lattice_points(
@@ -73,7 +82,7 @@ def print_stencil(stencil_shape: str):
         UNIT_LENGTH,
         shape.is_inside,
     )
-    path = Path(f"output/unit_length_{UNIT_LENGTH}/stencil/{stencil_shape}")
+    path = Path(f"output/stencil/{stencil_shape}")
 
     # the base stencil shape consist of multiple smaller shapes merged together
     stencil_base_shapes = []
@@ -85,10 +94,28 @@ def print_stencil(stencil_shape: str):
     save_shapes({"blue": stencil_base_shapes}, path / f"base.png")
     write_lattice_indices(path/"base.txt", stencil_base_indices)
 
+
+def print_stencil_variants(stencil_shape: str):
+    grid_type = GridType.PACKED
+    path = Path(f"output/stencil/{stencil_shape}")
+    lattice_indices = read_lattice_indices(path / "base.txt")
+
+    lattice_points = []
+    stencil_base_shapes = []
+    for i, j in lattice_indices:
+        unit_vector = grid_type.get_unit_vector()
+        steps = np.array([i, j])
+        point = unit_vector @ steps * UNIT_LENGTH
+        stencil_base_shapes.append(
+            Hexagon((point[0], point[1]), UNIT_LENGTH/SQRT3 + 0.01))
+        lattice_points.append((point, (i, j)))
+
+    print(lattice_points)
+
     # for the holes, iterate over the power set.
     # but only add symmetric and translative invariants
     coords_subsets, indices_subsets = get_invariant_power_set(
-        grid_type, lattice_points, 3, 5)
+        grid_type, lattice_points, 3, 4)
     for i, (coords_subset, indices_subset) in enumerate(zip(coords_subsets, indices_subsets)):
         hole_shapes = []
         for coords in coords_subset:
